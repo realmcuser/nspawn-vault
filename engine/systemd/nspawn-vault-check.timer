@@ -1,0 +1,10 @@
+[Unit]
+Description=Check for stale nspawn-vault backups every 30 minutes
+
+[Timer]
+OnCalendar=*:5/30
+RandomizedDelaySec=30
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,9 @@
+[Unit]
+Description=nspawn-vault dead-man switch: check for stale backups
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/nspawn-vault/check-stale.sh
+StandardOutput=journal
+StandardError=journal

@@ -1,0 +1,8 @@
+[Unit]
+Description=Pull nspawn backups from %i
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/nspawn-vault/pull-host.sh %i
+StandardOutput=journal
+StandardError=journal

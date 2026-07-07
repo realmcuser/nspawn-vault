@@ -1,0 +1,52 @@
+#!/bin/bash
+# Engångsverktyg: lägger till OpenZFS officiella EL-repo och installerar ZFS
+# via DKMS (bygger mot körande kärna - säkrare val än kmod-zfs på en ny
+# distro som AlmaLinux 10 där prebyggda kmod-paket kan ligga efter).
+#
+# Körs manuellt EN gång INNAN nspawn-vault-paketet installeras, eftersom det
+# paketet deklarerar "Requires: zfs" och dnf annars inte hittar det - se
+# nspawn-vault.spec:s %description för resonemanget om varför detta inte kan
+# skeppas inuti det paketet (chicken-and-egg med dnf:s beroendelösning).
+#
+# Verifierat mot en riktig AlmaLinux 10.2-VM (192.168.157.165) 2026-07-01.
+# zfs-release är versionerad "3-0" för el10 (INTE "2-3" som på äldre EL-
+# versioner) - kolla https://zfsonlinux.org/epel/ om detta någonsin 404:ar
+# igen, versionsnumret har redan bytts en gång.
+#
+# Usage: nspawn-vault-setup-zfs
+set -euo pipefail
+
+if command -v zfs >/dev/null 2>&1; then
+    echo "zfs finns redan installerat, hoppar över." >&2
+    exit 0
+fi
+
+dist=$(rpm --eval '%{dist}')
+echo "Lägger till OpenZFS-repo för $dist ..." >&2
+dnf install -y epel-release
+dnf install -y "https://zfsonlinux.org/epel/zfs-release-3-0${dist}.noarch.rpm"
+
+echo "Installerar kernel-devel + zfs (DKMS är default i zfs-release-repot) ..." >&2
+dnf install -y kernel-devel-"$(uname -r)" zfs
+
+# zfs-dkms EGEN %post-trigger bygger normalt modulen automatiskt, men om
+# kernel-devel och zfs-dkms installeras i SAMMA dnf-transaktion (som ovan)
+# är RPM-scriptlet-ordningen inte garanterad - triggern kan hinna köras
+# innan kernel-devel faktiskt ligger på disk, så bygget hoppas tyst över
+# och dkms status blir kvar på "added" istället för "installed". Verifierat
+# live 2026-07-02 på en riktig AlmaLinux 10.2-VM (172.16.3.182): modprobe
+# gav "Module zfs not found" trots att kernel-devel fanns installerad.
+# Kolla explicit och bygg manuellt om det behövs - lita aldrig på att
+# autobuild-triggern hann köra.
+kver="$(uname -r)"
+zfs_ver="$(rpm -q --qf '%{version}' zfs-dkms)"
+echo "Kontrollerar dkms-status för zfs/$zfs_ver mot kärna $kver ..." >&2
+dkms status
+if ! dkms status "zfs/$zfs_ver" -k "$kver" 2>/dev/null | grep -q ': installed'; then
+    echo "Modulen byggdes inte automatiskt av zfs-dkms:s postinstall - bygger manuellt ..." >&2
+    dkms install -m zfs -v "$zfs_ver" -k "$kver"
+fi
+modprobe zfs
+
+echo "Klart. Verifiera med: zfs version" >&2
+echo "Nästa steg: dnf install nspawn-vault-<version>.${dist}.noarch.rpm" >&2

@@ -1,0 +1,9 @@
+[Unit]
+Description=nspawn-vault GFS retention prune
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/nspawn-vault/prune-all.sh
+StandardOutput=journal
+StandardError=journal

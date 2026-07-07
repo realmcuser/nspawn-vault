@@ -1,0 +1,22 @@
+[Unit]
+Description=nspawn-vault-web backend (FastAPI/uvicorn)
+After=network.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/nspawn-vault-web/env
+WorkingDirectory=/usr/share/nspawn-vault-web/backend
+# venv/bin/python3 is a symlink (path-agnostic), but console-script wrappers
+# like venv/bin/uvicorn have their venv path baked into the shebang at
+# `pip install` time - broken as soon as the venv is copied anywhere else
+# during packaging. Invoke via `python3 -m` instead to sidestep that.
+ExecStart=/usr/share/nspawn-vault-web/venv/bin/python3 -m uvicorn main:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=5
+User=root
+# root needed: shells out to `zfs`/`systemctl show`, which require
+# privileges on a typical AlmaLinux install without extra ZFS-permission
+# delegation. Never exposed except via Caddy on localhost.
+
+[Install]
+WantedBy=multi-user.target

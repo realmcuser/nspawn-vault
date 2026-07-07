@@ -1,0 +1,9 @@
+; Example DB credentials file for snapshot-db.sh.
+;
+; Install at /etc/cockpit-nspawn/pull/<container-name>.cnf on the SOURCE
+; host (not the vault), mode 600, owned by root. If this file doesn't exist
+; for a given container, snapshot-db.sh just skips the DB dump for it - not
+; every container needs one.
+[client]
+user=backup
+password=CHANGE-ME

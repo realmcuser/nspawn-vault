@@ -1,0 +1,26 @@
+# web/frontend
+web/frontend/node_modules/
+web/frontend/dist/
+
+# web/backend
+web/backend/venv/
+__pycache__/
+*.pyc
+*.db
+*.db-wal
+*.db-shm
+
+# build artifacts
+*.tar.gz
+*.rpm
+
+# editor/OS cruft
+.DS_Store
+*.swp
+
+# local Claude Code session/tool state - not project content
+.claude/
+
+# local secrets — never commit
+env
+.env

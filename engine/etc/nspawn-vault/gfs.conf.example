@@ -1,0 +1,7 @@
+# GFS-retention för ZFS-snapshots på valvet
+# Kopiera till gfs.conf för att ändra defaults.
+GH=24    # en per timme, sista 24 timmar
+GD=7     # en per dag,   sista 7 dagar
+GW=4     # en per vecka, sista 4 veckor
+GM=12    # en per månad, sista 12 månader
+GY=3     # en per år,    sista 3 år

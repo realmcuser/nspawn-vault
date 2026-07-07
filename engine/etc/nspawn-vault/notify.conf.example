@@ -1,0 +1,6 @@
+# Pushover för dead-man's switch-larm från valvet
+# Kopiera till notify.conf, fyll i, chmod 600.
+PUSHOVER_TOKEN=
+PUSHOVER_USER=
+# Slack webhook (valfritt)
+SLACK_URL=

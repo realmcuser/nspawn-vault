@@ -1,0 +1,19 @@
+# Verified working 2026-07-02 on a real AlmaLinux 10 test VM (LAN-only,
+# plain HTTP - WAN access not required). `http://` tells Caddy not to
+# attempt ACME/automatic HTTPS for this block.
+#
+# For a real domain + automatic HTTPS instead, replace `http://` with the
+# domain name (e.g. `vault.example.com {`) and make sure DNS points here.
+http:// {
+    encode gzip
+
+    handle /api/* {
+        reverse_proxy 127.0.0.1:8000
+    }
+
+    handle {
+        root * /usr/share/nspawn-vault-web/frontend/dist
+        try_files {path} /index.html
+        file_server
+    }
+}
