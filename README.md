@@ -8,6 +8,8 @@ machine reaches out and *pulls* a read-only copy of every configured
 container on a schedule, snapshots it with ZFS, and keeps a rolling
 retention history.
 
+![nspawn-vault-web dashboard](docs/dashboard.png)
+
 This repo contains three things that ship as separate RPMs but are
 developed together, since most changes touch more than one:
 
