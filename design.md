@@ -4,7 +4,7 @@ Standalone web UI for the backup vault (NOT a Cockpit module — see decision
 below). Builds on the infrastructure in `/usr/libexec/nspawn-vault/` on the
 vault server.
 
-See also: `nspawn-pull-backup-design.md` (threat model and architecture)
+See also: [`pull-backup-threat-model.md`](pull-backup-threat-model.md) (threat model and architecture)
 
 ---
 
