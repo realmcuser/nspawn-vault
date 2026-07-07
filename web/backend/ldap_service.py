@@ -6,7 +6,7 @@ import models
 def ldap_authenticate(username: str, password: str, cfg: "models.LdapSettings") -> Optional[dict]:
     """Bind to LDAP and return {is_admin: bool} on success, None on failure."""
     try:
-        from ldap3 import Server, Connection, ALL, SUBTREE, Tls
+        from ldap3 import Server, Connection, ALL, BASE, Tls
         tls_config = Tls(validate=ssl.CERT_NONE) if not cfg.tls_verify else None
         server = Server(cfg.server_url, tls=tls_config, get_info=ALL, connect_timeout=5)
 
@@ -34,14 +34,28 @@ def ldap_authenticate(username: str, password: str, cfg: "models.LdapSettings") 
                     conn.unbind()
                     return None
 
+            # Look up memberOf at the exact DN the user just authenticated
+            # with (user_bind_dn), not via a fresh subtree filter search
+            # under base_dn - a filter search for "(user_attr=username)"
+            # can match MORE than one entry under a directory that has a
+            # secondary/legacy view alongside the real accounts tree (e.g.
+            # FreeIPA's "compat" tree, cn=users,cn=compat,... - present for
+            # older LDAP clients, has no memberOf populated on it at all).
+            # entries[0] then isn't guaranteed to be the real account,
+            # search order across the two isn't something to rely on -
+            # confirmed live 2026-07-07: a real admin-group member's role
+            # kept resetting to non-admin on every login because the
+            # compat-tree duplicate (0 memberOf entries) was what got
+            # matched, not the real accounts-tree entry (38 memberOf
+            # entries, including the correct admin group).
             search_conn.search(
-                search_base=cfg.base_dn,
-                search_filter=f"({cfg.user_attr}={username})",
-                search_scope=SUBTREE,
+                search_base=user_bind_dn,
+                search_filter="(objectClass=*)",
+                search_scope=BASE,
                 attributes=["memberOf"],
             )
             if not search_conn.entries:
-                print(f"[LDAP] group lookup found no entry for '{username}' under base_dn='{cfg.base_dn}'", flush=True)
+                print(f"[LDAP] group lookup found no entry at '{user_bind_dn}'", flush=True)
                 if search_conn is not conn:
                     search_conn.unbind()
                 conn.unbind()

@@ -120,6 +120,17 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-web.service
 
 %changelog
+* Tue Jul 07 2026 Developer <dev@example.com> - 0.1.0-22
+- Fixed LDAP admin-group detection: the memberOf lookup searched the whole
+  base_dn subtree by (user_attr=username), which can match more than one
+  entry on a directory with a legacy/compat view alongside the real
+  accounts tree (e.g. FreeIPA's cn=users,cn=compat,... - present for older
+  LDAP clients, has no memberOf populated). entries[0] wasn't guaranteed to
+  be the real account, so a genuine admin-group member could have their
+  role silently reset to non-admin on every login. Now looks up memberOf
+  at the exact DN the user just authenticated with instead of a fresh
+  ambiguous search. Confirmed live against a real FreeIPA server.
+
 * Tue Jul 07 2026 Developer <dev@example.com> - 0.1.0-18
 - Adds a browse/single-file-download feature: a read-only file browser into
   a chosen snapshot (vault_archive.list_snapshot_dir/resolve_safe_path),
