@@ -1,80 +1,85 @@
-# Pull-baserad backup för cockpit-nspawn
+# Pull-based backup for cockpit-nspawn
 
-Designförslag att lämna till Claude Code. Bygger vidare på den befintliga
-push-modellen i `BackupDialog.jsx` / `RestoreDialog.jsx`, men inverterar
-trust-pathen så att en komprometterad kund-server inte kan nå eller förstöra
-backuparna.
-
----
-
-## 1. Varför (hotmodell)
-
-Befintlig push-modell:
-
-```
-[kund-server]  --(håller SSH-nyckel, rsync --delete + rm -rf)-->  [backup]
-   ^ komprometteras                                                  ^ raderas med
-```
-
-Kund-servern är *gäst på kundens LAN* och kan komprometteras. Eftersom den håller
-nyckeln och har skriv-/raderingsrätt till valvet, dör backuparna med produktionen.
-
-Pull-modell:
-
-```
-[kund-server]  <--(VALVET initierar, läser read-only)--  [backup-valv (betrott)]
-   ^ komprometteras                  inga creds            ^ håller alla nycklar
-     håller INGA backup-creds          ut härifrån           tar ZFS-snapshots
-     kan INTE nå valvet                                       prunar lokalt
-```
-
-Bärande principer:
-
-1. **Valvet initierar.** Kund-servern har inga utgående backup-creds och ingen
-   väg till valvet. Komprometterad host kan inte röra backuparna.
-2. **Read-only på kund-sidan.** Även om *valvet* komprometteras kan det bara
-   *läsa* kunddata via en forced-command-låst nyckel — aldrig skriva tillbaka.
-3. **Immutabilitet på valvet.** ZFS-snapshots (read-only, oåtkomliga från källan)
-   + offsite-replika. Retention/pruning sker enbart på den betrodda sidan.
-4. **Dead-man's switch.** En krypterad/död host slutar bara producera färska
-   pulls → valvet larmar. Mycket robustare än att varje host själv rapporterar fel.
-
-Transport: allt går över Tailscale/Headscale, precis som idag.
+Design proposal handed off to Claude Code. Builds on the existing push
+model in `BackupDialog.jsx` / `RestoreDialog.jsx`, but inverts the trust
+path so a compromised source server can't reach or destroy the backups.
 
 ---
 
-## 2. Arkitektur
+## 1. Why (threat model)
 
-Ett **backup-valv** (kan vara centralt eller per region) på Tailnet. Per kund:
+Existing push model:
 
-- En egen ed25519-nyckel på valvet (aldrig på kund-servern).
-- En ZFS-dataset: `vault/<kund>/<container>` med snapshot efter varje lyckad pull.
-- En offsite-tier (zfs send-replika *eller* restic append-only) för 3-2-1.
+```
+[source server]  --(holds SSH key, rsync --delete + rm -rf)-->  [backup]
+   ^ gets compromised                                              ^ gets deleted with it
+```
 
-Kund-servern får bara två tillägg:
-- En forced-command-låst `authorized_keys`-rad för backup-användaren.
-- En liten dispatcher som tillåter exakt två operationer: `snapshot-db` och
-  read-only rrsync av `/var/lib/machines`.
+The source server is a *guest on the customer's LAN* and can be
+compromised. Since it holds the key and has write/delete rights to the
+vault, the backups die along with production.
+
+Pull model:
+
+```
+[source server]  <--(VAULT initiates, reads read-only)--  [backup vault (trusted)]
+   ^ gets compromised            no creds                    ^ holds all the keys
+     holds NO backup creds       leave here                    takes ZFS snapshots
+     CANNOT reach the vault                                     prunes locally
+```
+
+Load-bearing principles:
+
+1. **The vault initiates.** The source server has no outgoing backup creds
+   and no path to the vault. A compromised host can't touch the backups.
+2. **Read-only on the source side.** Even if the *vault* is compromised, it
+   can only *read* source data via a forced-command-locked key — never
+   write back.
+3. **Immutability on the vault.** ZFS snapshots (read-only, unreachable
+   from the source) + an offsite replica. Retention/pruning happens only
+   on the trusted side.
+4. **Dead-man's switch.** An encrypted/dead host just stops producing
+   fresh pulls → the vault alerts. Far more robust than each host
+   self-reporting failures.
+
+Transport: everything goes over Tailscale/Headscale, same as today.
 
 ---
 
-## 3. Kund-sidan (minimal, read-only)
+## 2. Architecture
 
-### 3.1 Backup-användare + nyckel
+A **backup vault** (can be central or per region) on the Tailnet. Per
+source:
 
-Skapa en dedikerad användare (eller återanvänd root men lås nyckeln hårt —
-forced command gör att rollen ändå bara kan läsa). `restrict` slår av agent/port/
-X11-forwarding och pty.
+- Its own ed25519 key on the vault (never on the source server).
+- A ZFS dataset: `vault/<source>/<container>`, snapshotted after every
+  successful pull.
+- An offsite tier (a `zfs send` replica *or* append-only restic) for 3-2-1.
 
-`/home/nspawn-pull/.ssh/authorized_keys` (eller `root`s, låst):
+The source server only gets two additions:
+- A forced-command-locked `authorized_keys` line for the backup user.
+- A small dispatcher that allows exactly two operations: `snapshot-db` and
+  a read-only rrsync of `/var/lib/machines`.
+
+---
+
+## 3. Source side (minimal, read-only)
+
+### 3.1 Backup user + key
+
+Create a dedicated user (or reuse root but lock the key down hard - the
+forced command means the role can only ever read regardless). `restrict`
+turns off agent/port/X11 forwarding and pty.
+
+`/home/nspawn-pull/.ssh/authorized_keys` (or root's, locked down):
 
 ```
-restrict,command="/usr/local/lib/nspawn-pull/dispatch.sh" ssh-ed25519 AAAA...valvets-publika-nyckel... nspawn-pull@valv
+restrict,command="/usr/local/lib/nspawn-pull/dispatch.sh" ssh-ed25519 AAAA...vault's-public-key... nspawn-pull@vault
 ```
 
 ### 3.2 Dispatcher (whitelist)
 
-`/usr/local/lib/nspawn-pull/dispatch.sh` — släpper bara igenom två kommandon:
+`/usr/local/lib/nspawn-pull/dispatch.sh` - only lets two commands through:
 
 ```bash
 #!/bin/bash
@@ -85,14 +90,14 @@ ALLOWED_ROOT=/var/lib/machines
 case "$cmd" in
     "snapshot-db "*)
         name="${cmd#snapshot-db }"
-        # validera mot allowlist av kända containrar
+        # validate against an allowlist of known containers
         case "$name" in
             */*|*..*|"") echo "bad name" >&2; exit 1 ;;
         esac
         exec /usr/local/lib/nspawn-pull/snapshot-db.sh "$name"
         ;;
     "rsync --server --sender"*)
-        # rrsync läser själv SSH_ORIGINAL_COMMAND och tvingar read-only
+        # rrsync reads SSH_ORIGINAL_COMMAND itself and forces read-only
         exec rrsync -ro "$ALLOWED_ROOT"
         ;;
     *)
@@ -102,21 +107,23 @@ case "$cmd" in
 esac
 ```
 
-> `rrsync` ligger i `/usr/bin/rrsync` på AlmaLinux 9 (rsync-paketet). Faller den
-> inte ut: `/usr/share/doc/rsync/support/rrsync`. `-ro` = read-only.
+> `rrsync` lives at `/usr/bin/rrsync` on AlmaLinux 9 (the rsync package).
+> If it's not there: `/usr/share/doc/rsync/support/rrsync`. `-ro` =
+> read-only.
 
-### 3.3 Applikationskonsistent DB-dump (lokalt, lösenordet stannar kvar)
+### 3.3 Application-consistent DB dump (local, the password stays put)
 
-`/usr/local/lib/nspawn-pull/snapshot-db.sh` — kör mysqldump *inuti* containern,
-exakt som befintliga `mysqldumpBlock()`, men lösenordet bor i en lokal 600-fil
-på kund-servern och skickas aldrig från valvet:
+`/usr/local/lib/nspawn-pull/snapshot-db.sh` - runs mysqldump *inside* the
+container, exactly like the existing `mysqldumpBlock()`, but the password
+lives in a local mode-600 file on the source server and is never sent from
+the vault:
 
 ```bash
 #!/bin/bash
 set -euo pipefail
 NAME="$1"
 MYCNF_SRC="/etc/cockpit-nspawn/pull/${NAME}.cnf"   # [client]\npassword=...  (chmod 600)
-[ -f "$MYCNF_SRC" ] || exit 0                       # ingen DB konfigurerad → no-op
+[ -f "$MYCNF_SRC" ] || exit 0                       # no DB configured -> no-op
 
 if ! machinectl show "$NAME" --property=State 2>/dev/null | grep -q running; then
     echo "container $NAME not running" >&2; exit 1
@@ -132,54 +139,56 @@ systemd-run --machine="$NAME" --wait -- \
 echo "db snapshot ok: $DUMP" >&2
 ```
 
-Dumpen hamnar i container-trädet och följer därför med i rsync-pullen. Inget
-DB-lösenord lämnar någonsin kund-servern.
+The dump lands inside the container tree, so it rides along with the
+rsync pull. No DB password ever leaves the source server.
 
-> Alternativ till mysqldump: om `/var/lib/machines` ligger på btrfs kan man ta en
-> atomär subvolym-snapshot på kund-sidan och pulla från den. mysqldump är enklare
-> och ger logisk konsistens för InnoDB — börja där, optimera vid behov.
+> Alternative to mysqldump: if `/var/lib/machines` is on btrfs, you could
+> take an atomic subvolume snapshot on the source side and pull from that
+> instead. mysqldump is simpler and gives logical consistency for InnoDB -
+> start there, optimize if needed.
 
 ---
 
-## 4. Valv-sidan (betrodd, gör allt jobb)
+## 4. Vault side (trusted, does all the work)
 
-### 4.1 Per-kund pull-skript
+### 4.1 Per-source pull script
 
-`/usr/local/lib/nspawn-vault/pull.sh <kund-host> <container> <ssh-key> <dataset>`:
+`/usr/local/lib/nspawn-vault/pull.sh <source-host> <container> <ssh-key> <dataset>`:
 
 ```bash
 #!/bin/bash
 set -euo pipefail
-HOST="$1"; NAME="$2"; KEY="$3"; DATASET="$4"   # ex: vault/kund17/sys900
-MNT="/$(zfs get -H -o value mountpoint "$DATASET")"  # eller hårdkoda /vault-roten
+HOST="$1"; NAME="$2"; KEY="$3"; DATASET="$4"   # e.g. vault/source17/sys900
+MNT="/$(zfs get -H -o value mountpoint "$DATASET")"  # or hardcode the vault root
 SSH=(ssh -i "$KEY" -o BatchMode=yes -o StrictHostKeyChecking=accept-new)
 STATE="/var/lib/nspawn-vault/state/${DATASET//\//_}.json"
 mkdir -p "$(dirname "$STATE")"
 
 fail() { printf '{"result":"failed","ts":"%s","msg":"%s"}\n' "$(date -Iseconds)" "$1" > "$STATE"; exit 1; }
 
-# 1) Be kunden ta en färsk DB-dump (forced command tillåter bara detta + rrsync)
+# 1) Ask the source to take a fresh DB dump (forced command only allows this + rrsync)
 "${SSH[@]}" "$HOST" "snapshot-db $NAME" || fail "snapshot-db failed"
 
-# 2) Pulla read-only in i den levande dataseten. ZFS sköter inkrementellt;
-#    ingen --link-dest behövs eftersom snapshots ger versionerna.
+# 2) Pull read-only into the live dataset. ZFS handles incrementals;
+#    no --link-dest needed since snapshots give us the versions.
 rsync -aH --delete --numeric-ids \
     -e "${SSH[*]}" \
     "$HOST:/var/lib/machines/$NAME/" "$MNT/" \
     || fail "rsync pull failed"
 
-# 3) Atomär, read-only, oåtkomlig-från-källan snapshot
+# 3) Atomic, read-only, unreachable-from-the-source snapshot
 zfs snapshot "${DATASET}@$(date +%Y%m%d-%H%M%S)" || fail "zfs snapshot failed"
 
 printf '{"result":"success","ts":"%s"}\n' "$(date -Iseconds)" > "$STATE"
 ```
 
-Kör per kund via en systemd-timer på valvet (t.ex. var 30:e min, spridd).
+Run per source via a systemd timer on the vault (e.g. every 30 min,
+staggered).
 
-### 4.2 GFS-retention — lokalt på valvet
+### 4.2 GFS retention - local, on the vault
 
-Återanvänd din befintliga GFS-logik, men mot `zfs list -t snapshot` istället för
-fjärr-`rm`. Skelett:
+Reuse your existing GFS logic, but against `zfs list -t snapshot` instead
+of remote `rm`. Skeleton:
 
 ```bash
 #!/bin/bash
@@ -192,15 +201,17 @@ zfs list -H -o name -t snapshot -s creation "$DATASET" \
   | while read -r snap; do zfs destroy "${DATASET}@${snap}"; done
 ```
 
-`gfs.py` = i princip din GFS_PYTHON, men den läser snapshotnamn från stdin och
-*skriver ut dem som ska raderas* (istället för att radera filer själv). Då blir
-borttagningen ett explicit `zfs destroy` på den betrodda sidan.
+`gfs.py` = essentially your GFS_PYTHON, but it reads snapshot names from
+stdin and *prints the ones to delete* (instead of deleting files itself).
+That makes the actual deletion an explicit `zfs destroy` on the trusted
+side.
 
-### 4.3 Dead-man's switch (det viktigaste larmet)
+### 4.3 Dead-man's switch (the most important alert)
 
-En separat timer på valvet som skannar alla `state/*.json` och larmar om någon
-kund inte producerat en färsk lyckad pull inom tröskeln. En krypterad/död host
-*kan inte* själv rapportera — den slutar bara dyka upp här.
+A separate timer on the vault that scans every `state/*.json` and alerts
+if some source hasn't produced a fresh successful pull within the
+threshold. An encrypted/dead host *can't* self-report - it just stops
+showing up here.
 
 ```bash
 #!/bin/bash
@@ -212,7 +223,7 @@ for f in /var/lib/nspawn-vault/state/*.json; do
     res=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["result"])' "$f" 2>/dev/null || echo missing)
     age=$(( (now - ts) / 60 ))
     if [ "$res" != success ] || [ "$age" -gt "$THRESHOLD_MIN" ]; then
-        # återanvänd din send_notification (SMTP/Slack/Pushover)
+        # reuse your existing send_notification (SMTP/Slack/Pushover)
         notify "STALE BACKUP: $(basename "$f") result=$res age=${age}min"
     fi
 done
@@ -220,87 +231,95 @@ done
 
 ---
 
-## 5. Offsite-tier (3-2-1, ransomware-säker)
+## 5. Offsite tier (3-2-1, ransomware-resistant)
 
-Välj en (eller båda):
+Pick one (or both):
 
-**A. ZFS send till en receive-only replika** (renast):
+**A. `zfs send` to a receive-only replica** (cleanest):
 ```bash
-zfs send -I "${DATASET}@<förra>" "${DATASET}@<senaste>" \
-  | ssh offsite "zfs recv -F vaultmirror/<kund>/<container>"
+zfs send -I "${DATASET}@<previous>" "${DATASET}@<latest>" \
+  | ssh offsite "zfs recv -F vaultmirror/<source>/<container>"
 ```
-Offsite-boxen tar bara emot; den har inga creds tillbaka. Helst på annan
-fysisk plats / annat moln.
+The offsite box only ever receives; it has no creds to write back.
+Ideally at a different physical location / different cloud.
 
-**B. restic till objektlagring med append-only / object-lock** (moln):
+**B. restic to object storage with append-only / object-lock** (cloud):
 ```bash
-restic -r b2:kund-vault backup "$MNT/.zfs/snapshot/<senaste>"
+restic -r b2:source-vault backup "$MNT/.zfs/snapshot/<latest>"
 ```
-Använd en **append-only restic-nyckel** (`--append-only` på REST/rclone-servern,
-eller B2 Object Lock). Då kan en komprometterad valv-server *inte* radera historiken.
+Use an **append-only restic key** (`--append-only` on the REST/rclone
+server, or B2 Object Lock). That way a compromised vault server *can't*
+delete the history.
 
-Poängen: även om valvet faller ska minst en kopia vara fysiskt oraderbar.
+The point: even if the vault itself goes down, at least one copy stays
+physically undeletable.
 
 ---
 
-## 6. Återställning (snabb väg)
+## 6. Restore (the fast path)
 
-Restore behöver skrivrätt mot kund-servern — men den rätten ska **inte** vara den
-read-only backup-nyckeln. Aktivera en separat restore-väg medvetet vid behov
-(interaktiv admin-SSH över Tailscale, eller en andra nyckel som normalt är
-avstängd). Då finns ingen stående cred som kan skriva data åt något håll.
+Restore needs write access to the source server - but that access should
+**not** be the read-only backup key. Deliberately activate a separate
+restore path when it's actually needed (interactive admin SSH over
+Tailscale, or a second key that's normally switched off). That way there's
+never a standing credential that can write data in either direction.
 
-Hel container tillbaka:
+Restoring a whole container:
 
 ```bash
-# 1) Välj snapshot på valvet
-zfs rollback "${DATASET}@<snapshot>"          # eller mounta .zfs/snapshot/<x> read-only
+# 1) Pick a snapshot on the vault
+zfs rollback "${DATASET}@<snapshot>"          # or mount .zfs/snapshot/<x> read-only
 
-# 2) Rsynca tillbaka till kunden (restore-väg, ej backup-nyckeln)
+# 2) Rsync back to the source (restore path, not the backup key)
 machinectl stop "$NAME" 2>/dev/null || true
-rsync -aH --delete "$MNT/" "kund:/var/lib/machines/$NAME/"
+rsync -aH --delete "$MNT/" "source:/var/lib/machines/$NAME/"
 
-# 3) Starta och importera DB-dumpen inifrån
+# 3) Start it and import the DB dump from inside
 machinectl start "$NAME"
 systemd-run --machine="$NAME" --wait -- \
     bash -c 'mysql < /var/tmp/cockpit-nspawn-db.sql'
 ```
 
-Mät och dokumentera RTO per kund — en backup vars restore aldrig testats är en
-hypotes.
+Measure and document RTO per source - a backup whose restore has never
+been tested is just a hypothesis.
 
 ---
 
-## 7. Integration i cockpit-nspawn
+## 7. Integration into cockpit-nspawn
 
-Pull-logiken bor på **valvet**, inte på kund-servern. Förslag på uppdelning:
+The pull logic lives on the **vault**, not on the source server. Suggested
+split:
 
-- **Kund-server (befintlig cockpit-nspawn):** lägg till en enkel toggle
-  *"Enable pull backup"* som installerar `dispatch.sh`, `snapshot-db.sh`,
-  forced-command-raden i `authorized_keys`, och (om DB) skriver `*.cnf`. Inget mer.
-- **Valv (ny cockpit-sida eller egen modul `nspawn-vault`):** en
-  översiktssida som listar alla kunder, senaste lyckade pull, snapshot-antal,
-  offsite-status och stale-larm. Här bor pull/prune/dead-man-timrarna.
-- **Behåll push-modellen** som den är för dem som vill — pull blir det säkra
-  standardläget för flottan. `RestoreDialog` kan utökas så den känner igen
-  "pull"-konfigurerade containrar och hämtar från valvet istället.
+- **Source server (existing cockpit-nspawn):** add a simple
+  *"Enable pull backup"* toggle that installs `dispatch.sh`,
+  `snapshot-db.sh`, the forced-command line in `authorized_keys`, and (if
+  there's a DB) writes `*.cnf`. Nothing more.
+- **Vault (new Cockpit page or its own `nspawn-vault` module):** an
+  overview page listing every source, latest successful pull, snapshot
+  count, offsite status, and stale alerts. The pull/prune/dead-man timers
+  live here.
+- **Keep the push model** as-is for anyone who wants it - pull becomes the
+  secure default for the fleet. `RestoreDialog` can be extended to
+  recognize "pull"-configured containers and fetch from the vault instead.
 
-Config-format kan spegla befintligt `/etc/cockpit-nspawn/backup/<name>.json`
-men med `mode: "pull"` och valv-sidans fält (`dataset`, `gfs_*`, offsite-mål).
+The config format can mirror the existing
+`/etc/cockpit-nspawn/backup/<name>.json`, but with `mode: "pull"` and the
+vault-side fields (`dataset`, `gfs_*`, offsite target).
 
 ---
 
-## 8. Utrullningsordning (lågrisk → hög hävstång)
+## 8. Rollout order (low risk → high leverage)
 
-1. Sätt upp valvet + ZFS + en testkund. Verifiera pull → snapshot → restore.
-2. Lägg till dead-man-larmet *innan* du litar på systemet.
-3. Migrera kunderna en och en; kör pull parallellt med befintlig push tills du
-   sett en lyckad restore per kund.
-4. Lägg till offsite-tier (append-only) när on-site-flödet är stabilt.
-5. Stäng av push-nycklarna på migrerade kunder — då försvinner den stående
-   skrivrätten från kund-servrarna helt.
+1. Set up the vault + ZFS + one test source. Verify pull → snapshot →
+   restore.
+2. Add the dead-man's alert *before* trusting the system.
+3. Migrate sources one at a time; run pull alongside the existing push
+   until you've seen one successful restore per source.
+4. Add the offsite tier (append-only) once the on-site flow is stable.
+5. Turn off the push keys on migrated sources - that's when the standing
+   write access disappears from the source servers entirely.
 
-Resultatet: en komprometterad kund-server kan kryptera sin egen produktion, men
-har varken nyckel eller väg till backuparna, och valvet larmar inom minuter på
-att pullarna slutat komma. Restore blir en hanterbar händelse istället för en
-katastrof.
+The result: a compromised source server can encrypt its own production,
+but has neither the key nor a path to the backups, and the vault alerts
+within minutes once pulls stop coming in. Restore becomes a manageable
+event instead of a disaster.
