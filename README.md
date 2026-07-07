@@ -79,26 +79,25 @@ vault host and don't worry about anything past that.
 ## Getting the RPMs
 
 All three packages publish to [GitHub Releases](https://github.com/realmcuser/nspawn-vault/releases)
-on this repo — but as **separate releases**, one per package, not one
-combined release per version bump. The release tags don't currently
-include the package name either (just `v<version>-<release>`), so it's not
-obvious from the Releases list alone which tag belongs to which package.
-Until that's fixed, here's the latest of each as of this writing — check
-the [Releases page](https://github.com/realmcuser/nspawn-vault/releases)
-directly for anything more recent than this table:
+on this repo — as **separate releases**, one per package, not one combined
+release per version bump. Each release's tag is prefixed with the package
+name (`nspawn-vault-web-v0.1.0-22`, for example), so it's clear from the
+Releases list alone which one you're looking at. (A handful of early
+releases from before this convention was in place used a bare
+`v<version>-<release>` tag with no prefix — those get phased out by the
+usual retention policy rather than needing a manual fix.)
 
-| Package | Latest release |
-|---|---|
-| `nspawn-vault-zfs-bootstrap` | [v0.1.0-6](https://github.com/realmcuser/nspawn-vault/releases/tag/v0.1.0-6) |
-| `nspawn-vault` | [v1.0.0-9](https://github.com/realmcuser/nspawn-vault/releases/tag/v1.0.0-9) |
-| `nspawn-vault-web` | [v0.1.0-22](https://github.com/realmcuser/nspawn-vault/releases/tag/v0.1.0-22) |
-
-Install in that order — `nspawn-vault-zfs-bootstrap` has to go on before
+Install in this order — `nspawn-vault-zfs-bootstrap` has to go on before
 `nspawn-vault` can resolve its `Requires: zfs`, see
-[`zfs-bootstrap/README.md`](zfs-bootstrap/README.md) for why. There's no
-version pinning between the three packages (`nspawn-vault-web` only
-`Requires: nspawn-vault`, not a specific version of it), so the table above
-doesn't need to move in lockstep - grab whichever is newest of each.
+[`zfs-bootstrap/README.md`](zfs-bootstrap/README.md) for why:
+
+1. `nspawn-vault-zfs-bootstrap`
+2. `nspawn-vault`
+3. `nspawn-vault-web`
+
+There's no version pinning between the three (`nspawn-vault-web` only
+`Requires: nspawn-vault`, not a specific version of it) - grab whichever
+is newest of each.
 
 ## Further reading
 
