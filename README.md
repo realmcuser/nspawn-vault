@@ -8,8 +8,8 @@ machine reaches out and *pulls* a read-only copy of every configured
 container on a schedule, snapshots it with ZFS, and keeps a rolling
 retention history.
 
-This repo contains two things that ship as separate RPMs but are developed
-together, since most changes touch both:
+This repo contains three things that ship as separate RPMs but are
+developed together, since most changes touch more than one:
 
 - **[`engine/`](engine/README.md)** (package `nspawn-vault`) — the backup
   engine itself. Systemd timers that SSH out to each source host, pull a
@@ -19,6 +19,10 @@ together, since most changes touch both:
   dashboard for the engine. Shows pull status per host and container, an
   unmissable banner when something's gone stale, and an admin page for
   configuring source hosts, retention, and notifications.
+- **[`zfs-bootstrap/`](zfs-bootstrap/README.md)** (package
+  `nspawn-vault-zfs-bootstrap`) — a small, zero-dependency package that
+  installs ZFS itself before the other two can go on. See its README for
+  why this had to be split out on its own.
 
 ## Why pull, not push
 
@@ -71,6 +75,30 @@ against that target specifically, and `nspawn-vault`'s `Requires: zfs`
 depends on the OpenZFS repo being set up for it (see
 [`zfs-bootstrap/`](zfs-bootstrap/README.md)) — pick AlmaLinux 10 for the
 vault host and don't worry about anything past that.
+
+## Getting the RPMs
+
+All three packages publish to [GitHub Releases](https://github.com/realmcuser/nspawn-vault/releases)
+on this repo — but as **separate releases**, one per package, not one
+combined release per version bump. The release tags don't currently
+include the package name either (just `v<version>-<release>`), so it's not
+obvious from the Releases list alone which tag belongs to which package.
+Until that's fixed, here's the latest of each as of this writing — check
+the [Releases page](https://github.com/realmcuser/nspawn-vault/releases)
+directly for anything more recent than this table:
+
+| Package | Latest release |
+|---|---|
+| `nspawn-vault-zfs-bootstrap` | [v0.1.0-6](https://github.com/realmcuser/nspawn-vault/releases/tag/v0.1.0-6) |
+| `nspawn-vault` | [v1.0.0-9](https://github.com/realmcuser/nspawn-vault/releases/tag/v1.0.0-9) |
+| `nspawn-vault-web` | [v0.1.0-22](https://github.com/realmcuser/nspawn-vault/releases/tag/v0.1.0-22) |
+
+Install in that order — `nspawn-vault-zfs-bootstrap` has to go on before
+`nspawn-vault` can resolve its `Requires: zfs`, see
+[`zfs-bootstrap/README.md`](zfs-bootstrap/README.md) for why. There's no
+version pinning between the three packages (`nspawn-vault-web` only
+`Requires: nspawn-vault`, not a specific version of it), so the table above
+doesn't need to move in lockstep - grab whichever is newest of each.
 
 ## Further reading
 
