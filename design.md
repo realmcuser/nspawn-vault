@@ -1,286 +1,312 @@
-# nspawn-vault — Designdokument
+# nspawn-vault — Design Document
 
-Fristående webb-UI för backup-valvet (INTE en Cockpit-modul — se beslut nedan).
-Bygger på infrastrukturen i `/usr/libexec/nspawn-vault/` på valv-servern.
+Standalone web UI for the backup vault (NOT a Cockpit module — see decision
+below). Builds on the infrastructure in `/usr/libexec/nspawn-vault/` on the
+vault server.
 
-Se även: `nspawn-pull-backup-design.md` (hotmodell och arkitektur)
-
----
-
-## Beslut: fristående webb-UI, inte en Cockpit-modul (2026-07-01)
-
-Ursprungligen planerad som en Cockpit-modul (`cockpit-nspawn-vault`), men beslutat
-att bygga ett helt fristående webb-frontend istället, av två skäl:
-
-1. **Renare översikter**: valvet ska kunna visa tydliga varningssignaler (stora
-   röda varningar när en källas pull-backuper slutat fungera) utan att behöva
-   anpassa sig efter Cockpits UI-ramverk och begränsningar.
-2. **Inget Cockpit-beroende**: valvet är redan en separat server med ett eget
-   syfte (ta emot pull-backuper, hantera ZFS, larma) — kräver inte `machinectl`
-   eller någon av Cockpits containerhanteringsfunktioner.
-
-Tänkt stack: samma mönster som the internal build tool (FastAPI-backend + enkel frontend),
-med Caddy som reverse proxy/TLS framför. Inte påbörjat — ren framtidsplan.
-Autentisering (eftersom Cockpits PAM-inloggning inte längre finns gratis) är
-olöst och måste beslutas när UI:t faktiskt börjar byggas.
-
-Kund-sidan (dispatcher + authorized_keys i `/usr/local/lib/nspawn-pull/` på
-nspawn-hosten, oförändrad idag) förblir dock kopplad till cockpit-nspawn-
-paketeringen — se
-"Kund-sidan i cockpit-nspawn (toggle)" nedan. Det är bara valvets EGEN
-administrationsyta som blir fristående.
+See also: `nspawn-pull-backup-design.md` (threat model and architecture)
 
 ---
 
-## Valv-OS: byte från Ubuntu till AlmaLinux (planerat, 2026-07-01)
+## Decision: standalone web UI, not a Cockpit module (2026-07-01)
 
-Nuvarande valv (192.0.2.10) kör Ubuntu 26.04 + native `zfsutils-linux` och
-fortsätter göra det tills vidare — det är referens/produktion under tiden.
+Originally planned as a Cockpit module (`cockpit-nspawn-vault`), but
+decided to build a fully standalone web frontend instead, for two reasons:
 
-Ny plan: en AlmaLinux 10 libvirt/KVM-VM (byggs på build-host) med ZFS via
-OpenZFS officiella DKMS-repo för EL, för att få samma bekanta RHEL-stack som
-resten av miljön. Skälet till att Ubuntu valdes ursprungligen (ZFS kräver DKMS
-på RHEL pga CDDL/GPL-licenskonflikt, Ubuntu har det inbyggt) kvarstår som
-motivering för *varför* det inte är trivialt — men bedöms värt besväret för
-konsistensens skull.
+1. **Cleaner overviews**: the vault needs to be able to show clear warning
+   signals (large red alerts when a source's pull backups have stopped
+   working) without having to conform to Cockpit's UI framework and its
+   constraints.
+2. **No Cockpit dependency**: the vault is already a separate server with
+   its own purpose (receive pull backups, manage ZFS, alert) — doesn't
+   need `machinectl` or any of Cockpit's container-management
+   functionality.
 
-**RPM-paketering redan skissad och lokalt byggtestad**: `/root/nspawn-vault/engine/`
-(på build-host — flyttat dit 2026-07-03 när `nspawn-vault` och `nspawn-vault-web`
-slogs ihop till en gemensam utvecklingskatalog, se `CLAUDE.md`), med
-`nspawn-vault.spec`. Innehåller:
+Planned stack: same pattern as the internal build tool (FastAPI backend +
+simple frontend), with Caddy as reverse proxy/TLS in front. Not started
+yet — pure future planning. Authentication (since Cockpit's PAM login
+isn't available for free anymore) is unresolved and needs deciding once
+the UI actually starts getting built.
 
-- Skript flyttade från `/usr/local/lib` (fel FHS-plats för paketerad mjukvara)
-  till `/usr/libexec/nspawn-vault/`
-- **Buggfix**: `pull.sh`s dataset-default var hårdkodad till `vault/source0/...`
-  oavsett `$HOST` — fixat till att härledas från `${HOST%%.*}`, annars kolliderar
-  flera källservrar i samma dataset-namnrymd
-- Systemd **template unit** `nspawn-vault-pull@.service`/`.timer` ersätter
-  handskrivna per-host-filer — ny källa: `systemctl enable --now
-  nspawn-vault-pull@<host>.timer`
-- `setup-zfs.sh` och `init-pool.sh` som explicita manuella first-run-steg
-  (medvetet INTE i `%post` — repo-tillägg och poolskapande för känsligt att
-  göra tyst)
-- **Helt verifierat i praktiken 2026-07-01** mot en riktig AlmaLinux 10.2-VM
-(198.51.100.20, byggd på build-host): `setup-zfs.sh` körd (rätt repo-URL hittad
-efter att första gissningen 404:ade — `zfs-release-3-0.el10`, inte `2-3`),
-`init-pool.sh /dev/vdb` körd, RPM byggd via the internal build tool (eget projekt skapat,
-`nspawn-vault-1.0.0-2.el10.noarch.rpm`) och installerad rent med `dnf install
-<url>` — `Requires: zfs` löstes automatiskt. SSH-nyckel genererad, kundsidans
-`authorized_keys` på source0 utökad additivt (ny rad, rör inte produktionsvalvets
-befintliga nyckel), containerlista + timers konfigurerade, en full pull-cykel mot
-`testapp1` kördes och gav `{"result":"success",...}` med en 1.49 GB ZFS-snapshot.
-Fullständig steg-för-steg-dokumentation i `/root/nspawn-vault/engine/README.md`
-(skriven för att bli GitHub-projektets startsida).
-
-Källträd finns som tarboll `/root/nspawn-vault.tar.gz`, the internal build tool-projekt skapat
-(separat från cockpit-nspawns project_id 4).
+The source side (dispatcher + authorized_keys in
+`/usr/local/lib/nspawn-pull/` on the nspawn host, unchanged today) stays
+tied to the cockpit-nspawn packaging, though — see "Source side in
+cockpit-nspawn (toggle)" below. It's only the vault's OWN admin surface
+that becomes standalone.
 
 ---
 
-## Framtida: replikering mellan flera valv (syncoid) — bara en fundering
+## Vault OS: switching from Ubuntu to AlmaLinux (planned, 2026-07-01)
 
-Om fler valv (2-3 st) sätts upp för redundans: rekommenderat är `zfs send |
-zfs receive` via `syncoid` (sanoid-projektets omslag), inte ett block-nivå-
-mirror-vdev (ZFS-mirrors är inte designade för separata hosts/WAN). Detta
-återanvänder samma snapshots som redan tas av GFS-schemat.
+The current vault (192.0.2.10) runs Ubuntu 26.04 + native
+`zfsutils-linux` and keeps doing so for now — it's the reference/
+production system in the meantime.
 
-**Viktigt att komma ihåg**: detta är asynkron replikering, inte synkron
-spegling — en sekundär valv ligger alltid en pull-cykel efter (idag ~30 min).
-Ger redundans/DR, inte failover utan dataförlustfönster. Inget beslutat,
-inget att bygga just nu.
+New plan: an AlmaLinux 10 libvirt/KVM VM (built on the build host) with
+ZFS via OpenZFS's official DKMS repo for EL, to get the same familiar
+RHEL stack as the rest of the environment. The reason Ubuntu was chosen
+originally (ZFS needs DKMS on RHEL due to the CDDL/GPL license conflict,
+Ubuntu has it built in) still stands as the reason *why* this isn't
+trivial — but it's judged worth the trouble for the sake of consistency.
+
+**RPM packaging already sketched and build-tested locally**:
+`/root/nspawn-vault/engine/` (on the build host — moved there 2026-07-03
+when `nspawn-vault` and `nspawn-vault-web` were merged into one shared
+development directory, see `CLAUDE.md`), with `nspawn-vault.spec`.
+Contains:
+
+- Scripts moved from `/usr/local/lib` (wrong FHS location for packaged
+  software) to `/usr/libexec/nspawn-vault/`
+- **Bug fix**: `pull.sh`'s dataset default was hardcoded to
+  `vault/source0/...` regardless of `$HOST` — fixed to derive it from
+  `${HOST%%.*}` instead, otherwise multiple source servers collide in the
+  same dataset namespace
+- Systemd **template unit** `nspawn-vault-pull@.service`/`.timer`
+  replaces hand-written per-host files — new source: `systemctl enable
+  --now nspawn-vault-pull@<host>.timer`
+- `setup-zfs.sh` and `init-pool.sh` as explicit manual first-run steps
+  (deliberately NOT in `%post` — adding repos and creating a pool are too
+  sensitive to do silently)
+- **Fully verified in practice on 2026-07-01** against a real AlmaLinux
+10.2 VM (198.51.100.20, built on the build host): `setup-zfs.sh` run
+(found the right repo URL after the first guess 404'd —
+`zfs-release-3-0.el10`, not `2-3`), `init-pool.sh /dev/vdb` run, RPM built
+via the internal build tool (its own project created,
+`nspawn-vault-1.0.0-2.el10.noarch.rpm`) and installed cleanly with `dnf
+install <url>` — `Requires: zfs` resolved automatically. SSH key
+generated, the source side's `authorized_keys` on source0 extended
+additively (a new line, doesn't touch the production vault's existing
+key), container list + timers configured, a full pull cycle against
+`testapp1` ran and returned `{"result":"success",...}` with a 1.49 GB ZFS
+snapshot. Full step-by-step documentation in
+`/root/nspawn-vault/engine/README.md` (written to become the GitHub
+project's landing page).
+
+Source tree exists as a tarball at `/root/nspawn-vault.tar.gz`, an
+internal build tool project created for it (separate from
+cockpit-nspawn's project_id 4).
 
 ---
 
-## Infrastruktur på valvet (blir framtida webb-UI:ts backend)
+## Future: replication between multiple vaults (syncoid) — just a thought
 
-### Katalogstruktur på valvet
+If more vaults (2-3) get set up for redundancy: the recommendation is
+`zfs send | zfs receive` via `syncoid` (the sanoid project's wrapper), not
+a block-level mirror vdev (ZFS mirrors aren't designed for separate
+hosts/WAN). This reuses the same snapshots already taken by the GFS
+schedule.
 
-Nuvarande Ubuntu-valv (192.0.2.10) använder fortfarande `/usr/local/lib/`.
-Den nya RPM-paketeringen (se ovan) flyttar detta till `/usr/libexec/nspawn-vault/`
-— strukturen nedan visar den nya, paketerade layouten:
+**Important to remember**: this is asynchronous replication, not
+synchronous mirroring — a secondary vault is always one pull cycle behind
+(currently ~30 min). Gives redundancy/DR, not failover without a
+data-loss window. Nothing decided, nothing to build right now.
+
+---
+
+## Infrastructure on the vault (becomes the future web UI's backend)
+
+### Directory structure on the vault
+
+The current Ubuntu vault (192.0.2.10) still uses `/usr/local/lib/`. The
+new RPM packaging (see above) moves this to `/usr/libexec/nspawn-vault/`
+— the structure below shows the new, packaged layout:
 
 ```
 /etc/nspawn-vault/
-├── notify.conf                  # Pushover/Slack-creds för valv-larm
+├── notify.conf                  # Pushover/Slack creds for vault alerts
 └── source0.example.com/
-    └── containers               # En container per rad
+    └── containers               # One container per line
 
 /usr/libexec/nspawn-vault/
-├── pull.sh                      # Pull en container: pull.sh <host> <name>
-├── pull-host.sh                 # Pull alla containers för en host
+├── pull.sh                      # Pull one container: pull.sh <host> <name>
+├── pull-host.sh                 # Pull all containers for a host
 ├── check-stale.sh               # Dead-man's switch
-├── gfs-prune.sh                 # GFS-retention via zfs destroy
+├── gfs-prune.sh                 # GFS retention via zfs destroy
 ├── gfs.py
 ├── prune-all.sh
-├── setup-zfs.sh                 # manuellt, engångs, EJ i %post
-└── init-pool.sh                 # manuellt, engångs, EJ i %post
+├── setup-zfs.sh                 # manual, one-time, NOT in %post
+└── init-pool.sh                 # manual, one-time, NOT in %post
 
 /var/lib/nspawn-vault/state/
 └── vault_<host>_<name>.json     # {"result":"success","ts":"...","snap":"..."}
 
-/vault/                          # ZFS-pool (namn konfigurerbart via NSPAWN_VAULT_POOL)
+/vault/                          # ZFS pool (name configurable via NSPAWN_VAULT_POOL)
 └── source0/
     └── testapp1/                # dataset, snapshots: @20260630-210156
 ```
 
-### Systemd-timers på valvet
+### Systemd timers on the vault
 
-- `nspawn-vault-pull@<host>.timer` — templerad unit, en instans per källserver
-- `nspawn-vault-check.timer` — kör check-stale.sh var 30:e min (dead-man's switch)
-- `nspawn-vault-prune.timer` — kör prune-all.sh dagligen 04:00 (GFS-retention)
+- `nspawn-vault-pull@<host>.timer` — templated unit, one instance per
+  source server
+- `nspawn-vault-check.timer` — runs check-stale.sh every 30 min
+  (dead-man's switch)
+- `nspawn-vault-prune.timer` — runs prune-all.sh daily at 04:00 (GFS
+  retention)
 
 ---
 
-## Vad det fristående webb-UI:t ska visa
+## What the standalone web UI should show
 
-### Huvudvy — källserver-översikt
+### Main view — source server overview
 
-Tabell med en rad per konfigurerad källserver:
+Table with one row per configured source server:
 
-| Server | Containers | Senaste pull | Status | ZFS-pool |
+| Server | Containers | Latest pull | Status | ZFS pool |
 |--------|-----------|-------------|--------|----------|
 | source0.example.com | 5 | 2026-06-30 21:01 | OK | vault/source0 |
 
-### Detaljvy per server — containers
+### Per-server detail view — containers
 
-Expanderbar rad med tabell per container:
+Expandable row with a table per container:
 
-| Container | Senaste pull | Snapshot | Storlek | Nästa pull |
+| Container | Latest pull | Snapshot | Size | Next pull |
 |-----------|-------------|---------|---------|-----------|
 | testapp1  | 21:01 OK    | @20260630-210156 | 1.5 GB | 21:31 |
 
-### Snapshot-historik
+### Snapshot history
 
-Modal med lista över alla ZFS-snapshots för en container (`zfs list -t snapshot`).
-Knapp för att starta restore-flöde.
+Modal with a list of all ZFS snapshots for a container (`zfs list -t
+snapshot`). Button to start the restore flow.
 
-### Konfiguration
+### Configuration
 
-- Lägg till/ta bort källservrar
-- Konfigurera pull-intervall per server
-- GFS-retentionsnivåer
-- Notifieringskanaler (Pushover/Slack/SMTP) för dead-man's switch
-
----
-
-## Kund-sidan i cockpit-nspawn (toggle)
-
-I `MachineActions.jsx` eller `BackupDialog.jsx`: kryssruta/toggle
-*"Aktivera pull-backup från valvet"* som:
-
-1. Installerar `/usr/local/lib/nspawn-pull/dispatch.sh`
-2. Installerar `/usr/local/lib/nspawn-pull/snapshot-db.sh`
-3. Lägger till forced-command-raden i `/root/.ssh/authorized_keys`
-4. Visar valvets publika nyckel som användaren klistrar in på valvet
+- Add/remove source servers
+- Configure pull interval per server
+- GFS retention levels
+- Notification channels (Pushover/Slack/SMTP) for the dead-man's switch
 
 ---
 
-## Teknikval
+## Source side in cockpit-nspawn (toggle)
 
-- **ZFS**: native snapshots, immutabla från källan, effektiv incremental med `zfs send`
-- **rrsync -ro**: read-only rsync på kund-sidan, minimal attackyta
-- **ed25519**: en nyckel per valv (inte per kund), aldrig på kund-servern
-- **systemd-timers**: ingen cron, journal-loggning, enkelt att övervaka
-- **State-JSON**: enkel filbaserad status, lätt att läsa från det fristående webb-UI:t
+In `MachineActions.jsx` or `BackupDialog.jsx`: a checkbox/toggle *"Enable
+pull backup from the vault"* that:
+
+1. Installs `/usr/local/lib/nspawn-pull/dispatch.sh`
+2. Installs `/usr/local/lib/nspawn-pull/snapshot-db.sh`
+3. Adds the forced-command line to `/root/.ssh/authorized_keys`
+4. Shows the vault's public key for the user to paste onto the vault
 
 ---
 
-## Återstående att bygga (manuell fas)
+## Technology choices
 
-- [x] ZFS-pool + dataset
-- [x] pull.sh + dispatcher + rrsync på kund-sidan
-- [x] Testat pull av alla 5 containers från source0
-- [x] pull-host.sh (pull alla containers för en host)
-- [x] Systemd service + timer för automatiska pulls (var 30:e minut)
-- [x] check-stale.sh (dead-man's switch, threshold 3h)
-- [x] Systemd timer för check-stale (var 30:e minut)
-- [x] gfs-prune.sh + gfs.py (GFS-retention på ZFS-snapshots)
-- [x] Systemd timer för prune (dagligen 04:00)
-- [x] notify.conf + Pushover-notifiering verifierad
-- [x] DB-hantering per container
+- **ZFS**: native snapshots, immutable from the source, efficient
+  incrementals with `zfs send`
+- **rrsync -ro**: read-only rsync on the source side, minimal attack
+  surface
+- **ed25519**: one key per vault (not per source), never on the source
+  server
+- **systemd timers**: no cron, journal logging, easy to monitor
+- **State JSON**: simple file-based status, easy to read from the
+  standalone web UI
 
-## DB-hantering i pull-varianten — KLART och TESTAT (2026-07-01)
+---
+
+## Remaining to build (manual phase)
+
+- [x] ZFS pool + dataset
+- [x] pull.sh + dispatcher + rrsync on the source side
+- [x] Tested pulling all 5 containers from source0
+- [x] pull-host.sh (pull all containers for a host)
+- [x] Systemd service + timer for automatic pulls (every 30 minutes)
+- [x] check-stale.sh (dead-man's switch, 3h threshold)
+- [x] Systemd timer for check-stale (every 30 minutes)
+- [x] gfs-prune.sh + gfs.py (GFS retention on ZFS snapshots)
+- [x] Systemd timer for prune (daily at 04:00)
+- [x] notify.conf + Pushover notification verified
+- [x] Per-container DB handling
+
+## DB handling in the pull variant — DONE and TESTED (2026-07-01)
 
 ### Problem
-rsync av `/var/lib/machines/<name>/` medan DB kör → risk för inkonsistenta databasfiler.
+rsync of `/var/lib/machines/<name>/` while the DB is running → risk of
+inconsistent database files.
 
-### Lösning: per-container konfig på kund-sidan
+### Solution: per-container config on the source side
 
-Fil: `/etc/cockpit-nspawn/pull/<name>.conf` (chmod 600, katalog chmod 700)
+File: `/etc/cockpit-nspawn/pull/<name>.conf` (chmod 600, directory chmod
+700)
 
 ```bash
-# MariaDB/MySQL — dump medan containern kör (rekommenderat)
+# MariaDB/MySQL — dump while the container is running (recommended)
 DB_TYPE=mariadb
 DB_USER=root            # default: root
-DB_PASSWORD=hemligt     # tomt om auth-plugin tillåter (t.ex. mysql_native_password utan lösen)
+DB_PASSWORD=secret       # empty if the auth plugin allows it (e.g. mysql_native_password with no password)
 
-# PostgreSQL — dump medan containern kör
+# PostgreSQL — dump while the container is running
 DB_TYPE=postgres
 DB_USER=postgres        # default: postgres
-DB_PASSWORD=hemligt
+DB_PASSWORD=secret
 
-# Stäng container under backup (valfritt, fungerar oavsett DB_TYPE eller utan)
-# Praktiskt för pgapp1 (PostgreSQL, ok att stänga kl 02)
+# Stop the container during backup (optional, works regardless of DB_TYPE or without one)
+# Handy for pgapp1 (PostgreSQL, fine to stop at 02:00)
 STOP_DURING_BACKUP=true
 ```
 
-### Beteende i snapshot-db.sh / restore-after-backup.sh beroende på konfig
+### Behavior in snapshot-db.sh / restore-after-backup.sh depending on config
 
-| DB_TYPE | STOP_DURING_BACKUP | Åtgärd |
+| DB_TYPE | STOP_DURING_BACKUP | Action |
 |---------|-------------------|--------|
-| mariadb | false | mysqldump (--defaults-extra-file) inuti container → sql-fil följer med rsync |
-| postgres | false | pg_dumpall (PGPASSWORD) inuti container → sql-fil följer med rsync |
-| valfritt/inget | true | machinectl stop → rsync → machinectl start (via trap i pull.sh) |
-| (ingen .conf) | — | rsync direkt, ingen DB-hantering (no-op, som tidigare) |
+| mariadb | false | mysqldump (--defaults-extra-file) inside the container → sql file rides along with rsync |
+| postgres | false | pg_dumpall (PGPASSWORD) inside the container → sql file rides along with rsync |
+| any/none | true | machinectl stop → rsync → machinectl start (via trap in pull.sh) |
+| (no .conf) | — | rsync directly, no DB handling (no-op, as before) |
 
 ### Implementation
 
-- `dispatch.sh` på kund-sidan whitelistar nu även `restore-after-backup <name>`
-  (utöver `snapshot-db <name>` och rsync-kommandot), samma namnvalidering
-  (`*/*|*..*|""|*" "*` avvisas).
-- `snapshot-db.sh` läser `.conf`-filen om den finns; sourcear `DB_TYPE`,
-  `DB_USER`, `DB_PASSWORD`, `STOP_DURING_BACKUP`. Vid `STOP_DURING_BACKUP=true`
-  stoppas containern (pollar `machinectl show` tills den försvinner ur
-  registret, max 30s) och funktionen returnerar utan dump. Annars körs
-  mysqldump/pg_dumpall beroende på `DB_TYPE`.
-- `restore-after-backup.sh` (ny) läser samma `.conf`-fil, tar bort
-  dump-filen (`/var/tmp/cockpit-nspawn-db.sql`) ur den levande containern
-  om `DB_TYPE` var satt — den ska inte ligga okrypterad i produktion längre
-  än nödvändigt för att rsync ska hinna dra den — och startar containern
-  igen om `STOP_DURING_BACKUP=true`. Dumpen finns kvar (versionerad) i
-  ZFS-snapshotarna på valvet.
-- `pull.sh` på valvet sätter en `trap ... EXIT` direkt efter `snapshot-db`-
-  anropet som alltid anropar `restore-after-backup` vid skriptets slut —
-  garanterar återstart även om rsync eller zfs-snapshot-steget faller.
+- `dispatch.sh` on the source side now also whitelists
+  `restore-after-backup <name>` (in addition to `snapshot-db <name>` and
+  the rsync command), same name validation (`*/*|*..*|""|*" "*` gets
+  rejected).
+- `snapshot-db.sh` reads the `.conf` file if it exists; sources
+  `DB_TYPE`, `DB_USER`, `DB_PASSWORD`, `STOP_DURING_BACKUP`. When
+  `STOP_DURING_BACKUP=true`, the container gets stopped (polls
+  `machinectl show` until it disappears from the registry, max 30s) and
+  the function returns without a dump. Otherwise mysqldump/pg_dumpall
+  runs depending on `DB_TYPE`.
+- `restore-after-backup.sh` (new) reads the same `.conf` file, removes
+  the dump file (`/var/tmp/cockpit-nspawn-db.sql`) from the live
+  container if `DB_TYPE` was set — it shouldn't sit unencrypted in
+  production any longer than necessary for rsync to have pulled it — and
+  starts the container back up if `STOP_DURING_BACKUP=true`. The dump
+  stays around (versioned) in the vault's ZFS snapshots.
+- `pull.sh` on the vault sets a `trap ... EXIT` right after the
+  `snapshot-db` call that always invokes `restore-after-backup` at the
+  end of the script — guarantees a restart even if the rsync or
+  zfs-snapshot step fails.
 
-### Testat och verifierat (source0 → valv 192.0.2.10)
+### Tested and verified (source0 → vault 192.0.2.10)
 
-- **dbapp1** (MariaDB 10.5, root utan lösenord, `mysql_native_password`):
-  `DB_TYPE=mariadb`, `DB_USER=root`, `DB_PASSWORD=` (tom) → mysqldump gav
-  41 MB sql-fil i `/var/tmp/cockpit-nspawn-db.sql`, följde med rsync,
-  container förblev igång hela tiden.
-- **pgapp1** (PostgreSQL 16): `STOP_DURING_BACKUP=true` → container
-  stoppades, rsync kördes mot vilande filsystem, ZFS-snapshot togs,
-  container startades om automatiskt via trap, PostgreSQL lyssnade på
-  5432 igen efter ~3s.
-- **testapp1** (ingen `.conf`-fil): no-op-vägen fungerar oförändrat,
-  vanlig rsync utan DB-hantering.
+- **dbapp1** (MariaDB 10.5, root with no password,
+  `mysql_native_password`): `DB_TYPE=mariadb`, `DB_USER=root`,
+  `DB_PASSWORD=` (empty) → mysqldump produced a 41 MB sql file at
+  `/var/tmp/cockpit-nspawn-db.sql`, rode along with rsync, container
+  stayed running the whole time.
+- **pgapp1** (PostgreSQL 16): `STOP_DURING_BACKUP=true` → container got
+  stopped, rsync ran against a quiescent filesystem, ZFS snapshot taken,
+  container restarted automatically via the trap, PostgreSQL was
+  listening on 5432 again after ~3s.
+- **testapp1** (no `.conf` file): the no-op path works unchanged, plain
+  rsync with no DB handling.
 
 ---
 
-## Fristående webb-UI (nspawn-vault-web) — BYGGT och verifierat (2026-07-02)
+## Standalone web UI (nspawn-vault-web) — BUILT and verified (2026-07-02)
 
-`/root/nspawn-vault/web/` på build-host (flyttat dit 2026-07-03, se `CLAUDE.md`),
-9 faser genomförda och verifierade end-to-end (varje fas testad mot skarp
-data på AlmaLinux 10-VM:n 198.51.100.20 innan nästa påbörjades):
+`/root/nspawn-vault/web/` on the build host (moved there 2026-07-03, see
+`CLAUDE.md`), 9 phases completed and verified end-to-end (every phase
+tested against real data on the AlmaLinux 10 VM at 198.51.100.20 before
+starting the next):
 
 ```
 nspawn-vault-web/
 ├── backend/
 │   ├── main.py, auth_routes.py, auth_utils.py, database.py, models.py,
-│   │   ldap_service.py          # auth-lager, poratat från the internal build tool (SQLite+WAL istället för Postgres)
+│   │   ldap_service.py          # auth layer, ported from the internal build tool (SQLite+WAL instead of Postgres)
 │   └── vault_config.py, vault_state.py, vault_zfs.py,
-│       vault_systemd.py, vault_routes.py   # nspawn-vault-specifik domänlogik
+│       vault_systemd.py, vault_routes.py   # nspawn-vault-specific domain logic
 ├── frontend/src/
 │   ├── pages/{Login,Dashboard,HostDetail,Admin}.jsx
 │   ├── components/{StaleAlertBanner,StatusBadge,Spinner}.jsx
@@ -291,119 +317,131 @@ nspawn-vault-web/
 └── nspawn-vault-web.spec
 ```
 
-**Auth**: kopierat nästan rakt av från the internal build tool (JWT, argon2, lokal-först-
-sen-LDAP-fallback, admin-bootstrap via första-användaren-blir-admin), med två
-avsiktliga förbättringar mot originalet: `bind_password` redigeras (`********`)
-i `GET /api/admin/ldap` istället för att läcka i klartext, och LDAP-gruppens
-adminmedlemskap omvalideras vid **varje** inloggning (inte bara vid första
-auto-provisionering som i the internal build tool). SQLite+WAL istället för Postgres —
-beslutat med användaren, ingen extra tjänst behövs bara för en handfull
-adminkonton.
+**Auth**: copied almost verbatim from the internal build tool (JWT,
+argon2, local-then-LDAP fallback, admin bootstrap via
+first-user-becomes-admin), with two deliberate improvements over the
+original: `bind_password` is masked (`********`) in `GET
+/api/admin/ldap` instead of leaking in plaintext, and the LDAP group's
+admin membership gets re-validated on **every** login (not just on first
+auto-provisioning like in the internal build tool). SQLite+WAL instead of
+Postgres — decided together with the user, no extra service needed just
+for a handful of admin accounts.
 
-**Domänlogik** (`vault_state.py`) portar `check-stale.sh`s exakta logik
-(THRESHOLD_MIN=180, samma state-JSON-sökvägskonstruktion som `pull.sh`).
-**Fas 9-acceptanstest**: körde `check-stale.sh` och webb-API:et sida vid
-sida mot både frisk och konstgjord stale/failed-data — exakt överensstämmelse
-i alla lägen.
+**Domain logic** (`vault_state.py`) ports `check-stale.sh`'s exact logic
+(THRESHOLD_MIN=180, the same state-JSON path construction as `pull.sh`).
+**Phase 9 acceptance test**: ran `check-stale.sh` and the web API side by
+side against both healthy and artificially stale/failed data — exact
+agreement in every case.
 
-**StaleAlertBanner**: solid `bg-red-600`, `w-8 h-8`-ikon, medvetet eskalerad
-långt förbi the internal build tool egen (bleka/små) röda varningsstil — se komponentkoden
-för fullständigt Tailwind-recept.
+**StaleAlertBanner**: solid `bg-red-600`, `w-8 h-8` icon, deliberately
+escalated well past the internal build tool's own (pale/small) red
+warning style — see the component code for the full Tailwind recipe.
 
-**Buggar hittade och fixade under bygget** (värda att komma ihåg):
-- `NextElapseUSecRealtime`-mönstret (från `BackupsOverview.jsx`) har en
-  dold bugg: `date -d ""` (tom sträng, ingen schemalagd körning) misslyckas
-  INTE utan tolkas tyst som "idag" — måste kolla tom sträng explicit innan
-  `date -d` anropas, annars får man ett falskt men giltigt epoch-värde.
-- the build tool's `AuthContext.login()` satte bara `{username}` på `user`-objektet,
-  inte hela användarposten (inkl. `role`) — gjorde adminmeny osynlig direkt
-  efter inloggning tills sidan laddades om. Fixat: `login()` anropar nu
-  `fetchCurrentUser()` efter lyckad inloggning.
-- **RPM-paketering av vendored venv**: `%global debug_package %{nil}`
-  krävs (tomma debuginfo-paket kraschar bygget), och `venv/bin/uvicorn`
-  m.fl. wrapper-skript har byggsökvägen inbränd i sin shebang — trasig så
-  fort venv:n kopieras till buildroot. Löst med `python3 -m uvicorn` i
-  systemd-enheten (kringgår wrapper-skripten helt) + `%__requires_exclude_from`/
-  `%__provides_exclude_from` (annars läcker RPM:s beroendescanner in
-  byggsökvägen som ett trasigt `Requires`).
-- **Bygg måste ske på målets Python-version**: testat konkret — lokalt
-  Fedora 44-bygge (Python 3.14) är inkompatibelt med AlmaLinux 10 (Python
-  3.12) eftersom site-packages-sökvägen är versionsspecifik. Löst genom att
-  installera `rpm-build`+`gcc`+`python3-devel` och bygga direkt på VM:n.
+**Bugs found and fixed during the build** (worth remembering):
+- The `NextElapseUSecRealtime` pattern (from `BackupsOverview.jsx`) has a
+  hidden bug: `date -d ""` (empty string, no scheduled run) does NOT
+  fail, it silently gets parsed as "today" — has to check for an empty
+  string explicitly before calling `date -d`, otherwise you get a bogus
+  but valid epoch value.
+- The build tool's `AuthContext.login()` only set `{username}` on the
+  `user` object, not the full user record (incl. `role`) — made the
+  admin menu invisible right after login until the page got reloaded.
+  Fixed: `login()` now calls `fetchCurrentUser()` after a successful
+  login.
+- **RPM packaging of the vendored venv**: `%global debug_package %{nil}`
+  is required (empty debuginfo packages crash the build), and
+  `venv/bin/uvicorn` and other wrapper scripts have the build path baked
+  into their shebang — broken the moment the venv gets copied to the
+  buildroot. Solved with `python3 -m uvicorn` in the systemd unit
+  (sidesteps the wrapper scripts entirely) + `%__requires_exclude_from`/
+  `%__provides_exclude_from` (otherwise RPM's dependency scanner leaks
+  the build path in as a broken `Requires`).
+- **The build has to happen on the target's Python version**: tested
+  concretely — a local Fedora 44 build (Python 3.14) is incompatible
+  with AlmaLinux 10 (Python 3.12) because the site-packages path is
+  version-specific. Solved by installing `rpm-build`+`gcc`+
+  `python3-devel` and building directly on the VM.
 
-**Verifierat installerat och körande** på 198.51.100.20: `dnf install`
-av den färdiga RPM:en, tjänsten startar rent, serverar både `/api/*` och
-den byggda frontend:en (FastAPI:s egen static-fallback).
+**Verified installed and running** on 198.51.100.20: `dnf install` of the
+finished RPM, the service starts cleanly, serves both `/api/*` and the
+built frontend (FastAPI's own static fallback).
 
-**Caddy verifierat 2026-07-02**: installerat från EPEL, `Caddyfile` med
-`http://` (rent HTTP, ingen ACME/TLS — LAN-räcker, ingen WAN-access krävs)
-reverse-proxyar `/api/*` till `127.0.0.1:8000` och serverar frontend på
-`:80`. Bekräftat nåbart över LAN (`curl http://198.51.100.20/...` från
-build-host) medan uvicorn fortfarande bara lyssnar på `127.0.0.1` — bara
-Caddy exponerat mot nätverket. Föranlett av att kollegor behöver kunna
-logga in och sköta valvet, inte bara utvecklaren själv.
+**Caddy verified 2026-07-02**: installed from EPEL, `Caddyfile` with
+`http://` (plain HTTP, no ACME/TLS — LAN is enough, no WAN access needed)
+reverse-proxies `/api/*` to `127.0.0.1:8000` and serves the frontend on
+`:80`. Confirmed reachable over the LAN (`curl http://198.51.100.20/...`
+from the build host) while uvicorn still only listens on `127.0.0.1` —
+only Caddy is exposed to the network. Driven by the need for colleagues
+to be able to log in and manage the vault, not just the developer.
 
-## Rollbaserad redigering: GFS + notifieringar via Admin (2026-07-02)
+## Role-based editing: GFS + notifications via Admin (2026-07-02)
 
-Beslut: "user"-roll förblir ren läs-only (Dashboard/HostDetail, som redan
-byggt), men "admin"-roll (lokal eller LDAP — samma `role`-fält, redan
-byggt i fas 1/6) ska kunna redigera GFS-retention och notifieringar direkt
-i UI:t istället för att handredigera filer på valvet.
+Decision: the "user" role stays strictly read-only (Dashboard/HostDetail,
+already built), but the "admin" role (local or LDAP — same `role` field,
+already built in phase 1/6) should be able to edit GFS retention and
+notifications directly in the UI instead of hand-editing files on the
+vault.
 
-**Backend**: `vault_config.write_gfs_conf()` och `write_notify_conf()` (nya),
-`read_notify_conf_masked()` för admin-vyn (samma `********`-sentinel-mönster
-som LDAP `bind_password` — hemligheter läcks aldrig i klartext till
-frontend). Nya endpoints, alla `get_current_admin`-skyddade:
-`PUT /api/admin/settings/gfs`, `GET/PUT /api/admin/settings/notify`.
+**Backend**: `vault_config.write_gfs_conf()` and `write_notify_conf()`
+(new), `read_notify_conf_masked()` for the admin view (the same
+`********` sentinel pattern as LDAP `bind_password` — secrets never leak
+in plaintext to the frontend). New endpoints, all `get_current_admin`-
+protected: `PUT /api/admin/settings/gfs`, `GET/PUT
+/api/admin/settings/notify`.
 
-**Säkerhetskritiskt fynd under bygget**: `check-stale.sh` gör `source
-"$NOTIFY_CONF"` som root — om Pushover-token/Slack-URL skrivs oskyddat till
-filen och innehåller skalmetatecken (`$()`, bakåtcitat, etc.) skulle det
-kunna exekvera godtycklig kod nästa gång dead-man's-switchen kör. Löst med
-`_shell_quote()` (enkelfnuttar + escape av inbäddade fnuttar) i
-`write_notify_conf()`. **Testat konkret**: skrev in `$(touch /tmp/PWNED)`
-som token via API, verifierade att filen på disk fick korrekt
-enkelfnutt-citerat värde, körde `source` på riktigt — ingen fil skapades,
-värdet kom ut som ren textsträng. Även bekräftat att `********`-sentinelen
-bevarar riktiga hemligheter vid efterföljande PUT utan ändring.
+**Security-critical finding during the build**: `check-stale.sh` does
+`source "$NOTIFY_CONF"` as root — if a Pushover token/Slack URL gets
+written to the file unprotected and contains shell metacharacters
+(`$()`, backticks, etc.), it could execute arbitrary code the next time
+the dead-man's switch runs. Solved with `_shell_quote()` (single-quoting
++ escaping embedded quotes) in `write_notify_conf()`. **Tested
+concretely**: entered `$(touch /tmp/PWNED)` as a token via the API,
+verified the file on disk got the correctly single-quoted value,
+actually ran `source` on it — no file got created, the value came out as
+a plain text string. Also confirmed the `********` sentinel preserves
+real secrets on a subsequent PUT with no change.
 
-**Frontend**: nya sektioner "GFS Retention" och "Notifications" i
-`Admin.jsx` (samma kort-layout som LDAP-sektionen). `Dashboard.jsx`s
-gamla "redigera på disk"-hint ersatt med rollmedveten text: admin ser
-en länk till Admin-sidan, user ser "be en admin ändra detta".
+**Frontend**: new "GFS Retention" and "Notifications" sections in
+`Admin.jsx` (same card layout as the LDAP section). `Dashboard.jsx`'s old
+"edit on disk" hint replaced with role-aware text: admin sees a link to
+the Admin page, user sees "ask an admin to change this".
 
-## Källserver/containerlista via Admin (2026-07-02)
+## Source server/container list via Admin (2026-07-02)
 
-Byggt som uppföljning: full CRUD för källservrar och deras containerlistor
-i Admin-sidan, admin-skyddat (`get_current_admin`).
+Built as a follow-up: full CRUD for source servers and their container
+lists in the Admin page, admin-protected (`get_current_admin`).
 
 **Backend** (`vault_config.py`): `create_host()`, `delete_host()`,
-`write_containers()` — hostnamn blir en katalogsökväg och containernamn blir
-rader i en fil + ZFS-dataset-segment, så båda valideras strikt mot path
-traversal/skalfarliga tecken (`_HOSTNAME_RE`, `_CONTAINER_NAME_RE`) innan
-något rör filsystemet. **Testat konkret**: `../../etc/evil` som hostnamn
-och `../evil` som containernamn — båda nekade med 400.
+`write_containers()` — a hostname becomes a directory path and a
+container name becomes lines in a file + a ZFS dataset segment, so both
+are validated strictly against path traversal/shell-dangerous characters
+(`_HOSTNAME_RE`, `_CONTAINER_NAME_RE`) before anything touches the
+filesystem. **Tested concretely**: `../../etc/evil` as a hostname and
+`../evil` as a container name — both rejected with 400.
 
-`delete_host()` tar **bara bort pull-konfigurationen** (katalogen under
-`/etc/nspawn-vault/`) — rör aldrig ZFS-datasets eller snapshots. Befintliga
-backuper för en borttagen host finns kvar, bara framtida pullar stoppas.
-Detta är explicit dokumenterat i UI:t (bekräftelsedialog vid borttagning).
+`delete_host()` **only removes the pull configuration** (the directory
+under `/etc/nspawn-vault/`) — never touches ZFS datasets or snapshots.
+Existing backups for a removed host stay in place, only future pulls
+stop. This is explicitly documented in the UI (confirmation dialog on
+deletion).
 
-**Timer-styrning** (`vault_systemd.py`): `enable_pull_timer()`/
+**Timer control** (`vault_systemd.py`): `enable_pull_timer()`/
 `disable_pull_timer()` — `systemctl enable/disable --now
-nspawn-vault-pull@<host>.timer`. Att skapa en host aktiverar INTE timern
-automatiskt (SSH-trust på kundsidan måste sättas upp manuellt först, se
-kund-toggle-avsnittet ovan) — admin flippar på den separat när klart, ett
-tydligt UI-meddelande om detta visas i "Lägg till host"-formuläret.
+nspawn-vault-pull@<host>.timer`. Creating a host does NOT enable the
+timer automatically (SSH trust on the source side has to be set up
+manually first, see the source-toggle section above) — admin flips it on
+separately once that's done, a clear UI message about this shows in the
+"Add host" form.
 
-**Testat end-to-end** (skapa → redigera containerlista → aktivera timer →
-ta bort → verifiera att timer avaktiverades och produktionshosten
-`source0.example.com` förblev orörd genom hela flödet), både direkt mot
-backend och genom Caddy på port 80.
+**Tested end-to-end** (create → edit container list → enable timer →
+delete → verify the timer got disabled and the production host
+`source0.example.com` stayed untouched throughout the whole flow), both
+directly against the backend and through Caddy on port 80.
 
-**Ej byggt (medvetet, se scope i v1)**: ZFS-snapshot-bläddring/restore-UI,
-multi-valv-replikerings-UI.
+**Not built (deliberately, see v1 scope)**: ZFS snapshot browsing/restore
+UI, multi-vault replication UI.
 
-Huvudfokus i UI:t (enligt beslutet ovan): väldigt tydlig, iögonfallande varning
-när en källas pull-backuper slutat fungera — inte bara en diskret badge som i
-Cockpit-mönstret, utan något som inte går att missa.
+Main focus in the UI (per the decision above): a very clear, eye-catching
+warning when a source's pull backups have stopped working — not just a
+discreet badge like the Cockpit pattern, but something impossible to
+miss.
