@@ -120,6 +120,15 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-web.service
 
 %changelog
+* Wed Jul 08 2026 Developer <dev@example.com> - 0.1.0-24
+- Adds a manual "Run prune now" button to the Admin GFS Retention section
+  (vault_systemd.trigger_prune_now(), POST /api/admin/prune/trigger-now)
+  - starts nspawn-vault-prune.service immediately instead of waiting for
+  its daily 04:00 timer. Same --no-block pattern as the existing per-host
+  "Run now" pull trigger. Handy right after changing GFS settings, or to
+  reclaim space proactively. Verified live: triggered a real prune run,
+  hermes-agent's snapshot count dropped from 41 to 27 immediately.
+
 * Wed Jul 08 2026 Developer <dev@example.com> - 0.1.0-23
 - Adds a per-container snapshot-retention figure to the HostDetail table:
   current snapshot count plus how many would remain after the next GFS

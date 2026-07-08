@@ -72,6 +72,32 @@ def trigger_pull_now(host: str) -> None:
         raise RuntimeError(proc.stderr.strip() or f"systemctl start {unit} failed")
 
 
+def is_prune_running() -> bool:
+    """Same live-state check as is_pull_running(), but for the single
+    global nspawn-vault-prune.service (GFS retention runs across every
+    host/container in one pass, not per-host)."""
+    proc = subprocess.run(
+        ["systemctl", "is-active", "nspawn-vault-prune.service"],
+        capture_output=True, text=True, timeout=5,
+    )
+    return proc.stdout.strip() in ("active", "activating")
+
+
+def trigger_prune_now() -> None:
+    """Starts nspawn-vault-prune.service immediately instead of waiting
+    for its daily 04:00 timer - same --no-block reasoning as
+    trigger_pull_now(): this runs from an HTTP handler that must return
+    quickly, and systemd already guarantees only one instance of this
+    unit runs at a time, so calling this while a prune is already in
+    progress is a safe no-op."""
+    proc = subprocess.run(
+        ["systemctl", "start", "--no-block", "nspawn-vault-prune.service"],
+        capture_output=True, text=True, timeout=10,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(proc.stderr.strip() or "systemctl start nspawn-vault-prune.service failed")
+
+
 def fetch_pull_log(host: str, max_lines: int = 2000) -> str:
     """Journal for the MOST RECENT invocation of
     nspawn-vault-pull@<host>.service only - the systemd unit

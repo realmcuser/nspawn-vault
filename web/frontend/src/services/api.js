@@ -283,6 +283,19 @@ export async function triggerHostPull(host) {
   return response.json();
 }
 
+// Starts a GFS prune run immediately instead of waiting for its daily
+// 04:00 timer. Returns as soon as it's queued, not once it's finished.
+export async function triggerPruneNow() {
+  const response = await fetchWithAuth('/api/admin/prune/trigger-now', {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || 'Failed to start prune');
+  }
+  return response.json();
+}
+
 // The vault's own public SSH key - not a secret, just admin-gated for
 // consistency with the rest of the source-host management endpoints.
 export async function fetchVaultPublicKey() {

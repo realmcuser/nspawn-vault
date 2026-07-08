@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Users, Shield, Loader2, AlertCircle, Check, X, Network, HardDrive, Bell, Server, Trash2, Pencil, Plus, Copy, KeyRound, ScrollText } from 'lucide-react';
+import { Users, Shield, Loader2, AlertCircle, Check, X, Network, HardDrive, Bell, Server, Trash2, Pencil, Plus, Copy, KeyRound, ScrollText, Play } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import {
   fetchUsers, updateUser, fetchAdminSettings, updateAdminSettings,
   fetchLdapSettings, updateLdapSettings, testLdapConnection,
   fetchGfsSettings, updateGfsSettings, fetchAdminNotifySettings, updateNotifySettings,
   fetchAdminHosts, createHost, deleteHost, updateHostContainers, updateHostTimer,
-  testHostConnection, fetchVaultPublicKey, fetchAuditLog,
+  testHostConnection, fetchVaultPublicKey, fetchAuditLog, triggerPruneNow,
 } from '../services/api';
 
 const EMPTY_LDAP = {
@@ -41,6 +41,8 @@ const Admin = () => {
   const [gfsSaving, setGfsSaving] = useState(false);
   const [gfsError, setGfsError] = useState(null);
   const [gfsSuccess, setGfsSuccess] = useState(null);
+  const [pruneTriggering, setPruneTriggering] = useState(false);
+  const [pruneResult, setPruneResult] = useState(null);
 
   const [notify, setNotify] = useState(EMPTY_NOTIFY);
   const [notifySaving, setNotifySaving] = useState(false);
@@ -188,6 +190,19 @@ const Admin = () => {
       setGfsError(err.message);
     } finally {
       setGfsSaving(false);
+    }
+  };
+
+  const handleTriggerPrune = async () => {
+    setPruneTriggering(true);
+    setPruneResult(null);
+    try {
+      await triggerPruneNow();
+      setPruneResult({ success: true, message: t('admin.gfs.pruneStarted') });
+    } catch (err) {
+      setPruneResult({ success: false, message: err.message });
+    } finally {
+      setPruneTriggering(false);
     }
   };
 
@@ -662,7 +677,7 @@ const Admin = () => {
           ))}
         </div>
 
-        <div className="pt-4">
+        <div className="pt-4 flex items-center gap-3 flex-wrap">
           <button
             onClick={handleGfsSave}
             disabled={gfsSaving}
@@ -671,7 +686,23 @@ const Admin = () => {
             {gfsSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
             {t('admin.gfs.save')}
           </button>
+          <button
+            onClick={handleTriggerPrune}
+            disabled={pruneTriggering}
+            title={t('admin.gfs.pruneNowHint')}
+            className="flex items-center gap-2 px-4 py-2 bg-surface-hover hover:bg-border text-text rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {pruneTriggering ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+            {t('admin.gfs.pruneNow')}
+          </button>
         </div>
+
+        {pruneResult && (
+          <div className={`mt-4 p-3 rounded-lg text-sm flex items-center gap-2 ${pruneResult.success ? 'bg-green-500/10 border border-green-500/20 text-green-400' : 'bg-red-500/10 border border-red-500/20 text-red-400'}`}>
+            {pruneResult.success ? <Check className="w-4 h-4 shrink-0" /> : null}
+            {pruneResult.message}
+          </div>
+        )}
       </div>
 
       {/* Notifications */}

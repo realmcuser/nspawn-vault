@@ -455,6 +455,25 @@ async def trigger_pull_admin(host: str, current_user=Depends(get_current_admin))
     return {"host": host, "triggered": True}
 
 
+@router.post("/api/admin/prune/trigger-now")
+async def trigger_prune_admin(current_user=Depends(get_current_admin)):
+    """Starts nspawn-vault-prune.service right now instead of waiting for
+    its daily 04:00 timer - handy right after changing GFS settings, or to
+    reclaim space proactively rather than waiting overnight. Returns as
+    soon as the job is queued (--no-block), does not wait for the prune
+    itself to finish."""
+    try:
+        vault_systemd.trigger_prune_now()
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"triggered": True}
+
+
+@router.get("/api/admin/prune/status")
+async def prune_status_admin(current_user=Depends(get_current_admin)):
+    return {"running": vault_systemd.is_prune_running()}
+
+
 @router.get("/api/vault/storage")
 async def get_vault_storage(current_user=Depends(get_current_user)):
     status = vault_zfs.storage_status(vault_config.pool_name())

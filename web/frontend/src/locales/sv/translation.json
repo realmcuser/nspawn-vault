@@ -144,7 +144,10 @@
       "monthly": "Månad",
       "yearly": "År",
       "save": "Spara",
-      "saved": "GFS-retentionsinställningar sparade."
+      "saved": "GFS-retentionsinställningar sparade.",
+      "pruneNow": "Kör pruning nu",
+      "pruneNowHint": "Kör samma nattliga GFS-pruning direkt istället för att vänta på 04:00-timern",
+      "pruneStarted": "Pruning startad – kolla tillbaka om en stund, det kan ta lite tid över alla servrar."
     },
     "notify": {
       "title": "Notifieringar",

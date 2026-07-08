@@ -144,7 +144,10 @@
       "monthly": "Monthly",
       "yearly": "Yearly",
       "save": "Save",
-      "saved": "GFS retention settings saved."
+      "saved": "GFS retention settings saved.",
+      "pruneNow": "Run prune now",
+      "pruneNowHint": "Runs the same nightly GFS prune immediately instead of waiting for its 04:00 timer",
+      "pruneStarted": "Prune started - check back shortly, this can take a moment across all hosts."
     },
     "notify": {
       "title": "Notifications",
