@@ -35,6 +35,8 @@
     "colLastPull": "Last pull",
     "colStatus": "Status",
     "colSnapshot": "Latest snapshot",
+    "colRetention": "Snapshots",
+    "retentionHint": "{{current}} stored now / {{retained}} would remain after the next GFS prune",
     "colSize": "Size",
     "viewLog": "View log",
     "logTitle": "Pull log: {{container}}",

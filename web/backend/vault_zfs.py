@@ -143,6 +143,43 @@ def module_status() -> dict:
     }
 
 
+GFS_SCRIPT_PATH = "/usr/libexec/nspawn-vault/gfs.py"
+
+
+def snapshot_retention(dataset: str, gfs_conf: dict) -> dict | None:
+    """Current snapshot count vs. how many would remain if
+    nspawn-vault-prune.timer ran right now. Shells out to the exact same
+    gfs.py the real prune job calls (see gfs-prune.sh) rather than
+    reimplementing its bucket logic here - the naive GH+GD+GW+GM+GY sum
+    is NOT this number, since a snapshot inside the last 24h also
+    satisfies that day's/week's/month's/year's bucket simultaneously, so
+    buckets overlap and the true retained count is usually lower. Returns
+    None if gfs.py isn't present (e.g. this app running somewhere other
+    than the actual vault) rather than raising."""
+    dataset = _safe(dataset)
+    if not os.path.isfile(GFS_SCRIPT_PATH):
+        return None
+    snaps = list_snapshots(dataset)
+    names = [s["name"].split("@", 1)[1] for s in snaps]
+    if not names:
+        return {"current_count": 0, "retained_count": 0, "prunable_count": 0}
+    proc = subprocess.run(
+        ["python3", GFS_SCRIPT_PATH,
+         str(gfs_conf["GH"]), str(gfs_conf["GD"]), str(gfs_conf["GW"]),
+         str(gfs_conf["GM"]), str(gfs_conf["GY"])],
+        input="\n".join(names), capture_output=True, text=True, timeout=15,
+    )
+    if proc.returncode != 0:
+        return None
+    prunable = len([line for line in proc.stdout.splitlines() if line.strip()])
+    current = len(names)
+    return {
+        "current_count": current,
+        "retained_count": current - prunable,
+        "prunable_count": prunable,
+    }
+
+
 def list_snapshots(dataset: str) -> list[dict]:
     """Sorted oldest-first (matches gfs-prune.sh's `-s creation`), so callers
     take [-1] for the latest snapshot."""

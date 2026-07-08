@@ -120,6 +120,18 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-web.service
 
 %changelog
+* Wed Jul 08 2026 Developer <dev@example.com> - 0.1.0-23
+- Adds a per-container snapshot-retention figure to the HostDetail table:
+  current snapshot count plus how many would remain after the next GFS
+  prune run (vault_zfs.snapshot_retention()). Shells out to the exact same
+  gfs.py the real nspawn-vault-prune.timer calls rather than
+  reimplementing its bucket logic - the naive GH+GD+GW+GM+GY sum is NOT
+  the right number here, since a recent snapshot can satisfy several
+  buckets (hour/day/week/...) at once. Prompted by a real question about
+  whether 40 stored snapshots for one container was too many - it wasn't
+  (12 of them were already due for the next nightly prune), but there was
+  no way to see that in the UI without doing the same manual check by hand.
+
 * Tue Jul 07 2026 Developer <dev@example.com> - 0.1.0-22
 - Fixed LDAP admin-group detection: the memberOf lookup searched the whole
   base_dn subtree by (user_attr=username), which can match more than one

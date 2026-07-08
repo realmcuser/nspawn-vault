@@ -100,6 +100,7 @@ async def get_host_detail(host: str, current_user=Depends(get_current_user)):
     if host not in vault_config.list_configured_hosts():
         raise HTTPException(status_code=404, detail="Host not found")
 
+    gfs_conf = vault_config.read_gfs_conf()
     containers = []
     for container in vault_config.read_containers(host):
         dataset = _dataset_for(host, container)
@@ -122,6 +123,7 @@ async def get_host_detail(host: str, current_user=Depends(get_current_user)):
             "used_bytes": vault_zfs.dataset_used_bytes(dataset),
             "age_minutes": vault_state.age_minutes(state) if state else None,
             "db_backed_up": vault_zfs.has_db_dump(dataset),
+            "retention": vault_zfs.snapshot_retention(dataset, gfs_conf),
         })
 
     return {

@@ -144,6 +144,7 @@ const HostDetail = () => {
                 <th className="px-4 py-3 font-medium">{t('host.colLastPull')}</th>
                 <th className="px-4 py-3 font-medium">{t('host.colStatus')}</th>
                 <th className="px-4 py-3 font-medium">{t('host.colSnapshot')}</th>
+                <th className="px-4 py-3 font-medium">{t('host.colRetention')}</th>
                 <th className="px-4 py-3 font-medium">{t('host.colSize')}</th>
                 {isAdmin && <th className="px-4 py-3 font-medium text-right">{t('admin.actions')}</th>}
               </tr>
@@ -176,6 +177,23 @@ const HostDetail = () => {
                     )}
                   </td>
                   <td className="px-4 py-3 font-mono text-text-muted text-xs">{c.last_snapshot || '—'}</td>
+                  <td className="px-4 py-3 font-mono text-xs">
+                    {c.retention ? (
+                      <span
+                        title={t('host.retentionHint', {
+                          current: c.retention.current_count,
+                          retained: c.retention.retained_count,
+                        })}
+                      >
+                        {c.retention.current_count}
+                        {c.retention.prunable_count > 0 && (
+                          <span className="text-text-muted"> / {c.retention.retained_count}</span>
+                        )}
+                      </span>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
                   <td className="px-4 py-3">{formatBytes(c.used_bytes)}</td>
                   {isAdmin && (
                     <td className="px-4 py-3 text-right whitespace-nowrap">

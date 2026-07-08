@@ -35,6 +35,8 @@
     "colLastPull": "Senaste pull",
     "colStatus": "Status",
     "colSnapshot": "Senaste snapshot",
+    "colRetention": "Snapshots",
+    "retentionHint": "{{current}} lagrade nu / {{retained}} skulle finnas kvar efter nästa GFS-pruning",
     "colSize": "Storlek",
     "viewLog": "Visa logg",
     "logTitle": "Pull-logg: {{container}}",
