@@ -215,6 +215,21 @@ export async function updateNotifySettings(data) {
   return response.json();
 }
 
+// Sends one real test email right now via the currently-saved SMTP relay
+// settings (not necessarily saved ones from a prior session - the caller
+// should save first so the test reflects what's actually stored).
+export async function sendTestEmail(to) {
+  const response = await fetchWithAuth('/api/admin/settings/notify/test-email', {
+    method: 'POST',
+    body: JSON.stringify({ to }),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || 'Failed to send test email');
+  }
+  return response.json();
+}
+
 // Admin: source host / container list management. Deleting a host only
 // removes the pull configuration - it never touches ZFS datasets/snapshots.
 export async function fetchAdminHosts() {
@@ -254,6 +269,18 @@ export async function updateHostContainers(host, containers) {
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
     throw new Error(error.detail || 'Failed to save container list');
+  }
+  return response.json();
+}
+
+export async function updateHostEmails(host, emails) {
+  const response = await fetchWithAuth(`/api/admin/hosts/${encodeURIComponent(host)}/emails`, {
+    method: 'PUT',
+    body: JSON.stringify({ emails }),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || 'Failed to save email recipients');
   }
   return response.json();
 }

@@ -120,6 +120,23 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-web.service
 
 %changelog
+* Fri Jul 10 2026 Developer <dev@example.com> - 0.1.0-25
+- Adds email alert configuration to Admin: SMTP relay settings (host, port,
+  STARTTLS/implicit TLS, from address, optional auth) in the Notifications
+  section, plus a "send test email" button that fires a real email
+  synchronously via nspawn-vault (engine)'s new send-email.sh and shows the
+  result inline - same pattern as the existing LDAP/SSH test-connection
+  buttons. Also adds a per-source-host email recipients editor next to the
+  existing container-list editor in the Source Hosts table
+  (vault_config.read_host_emails/write_host_emails, new
+  PUT /api/admin/hosts/{host}/emails) - up to a handful of addresses per
+  host, validated server-side before ever touching disk (same
+  validate-before-write pattern as hostnames/container names).
+- New POST /api/admin/settings/notify/test-email and vault_email.py
+  (subprocess wrapper around send-email.sh, mirrors vault_ssh.test_connection's
+  {success, message} result shape). SMTP_USER/SMTP_PASS follow the existing
+  "********" sentinel convention for secrets (never echoed back in plaintext).
+
 * Wed Jul 08 2026 Developer <dev@example.com> - 0.1.0-24
 - Adds a manual "Run prune now" button to the Admin GFS Retention section
   (vault_systemd.trigger_prune_now(), POST /api/admin/prune/trigger-now)

@@ -4,3 +4,14 @@ PUSHOVER_TOKEN=
 PUSHOVER_USER=
 # Slack webhook (valfritt)
 SLACK_URL=
+
+# SMTP-relä för e-postlarm (valfritt). Ett relä delas av alla källservrar -
+# vilka mottagare som larmas per server styrs istället av
+# /etc/nspawn-vault/<host>/notify-email (en adress per rad).
+SMTP_HOST=
+SMTP_PORT=587
+# starttls (port 587, vanligast) eller implicit (port 465)
+SMTP_TLS_MODE=starttls
+SMTP_USER=
+SMTP_PASS=
+SMTP_FROM=nspawn-vault@example.com

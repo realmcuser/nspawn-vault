@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Users, Shield, Loader2, AlertCircle, Check, X, Network, HardDrive, Bell, Server, Trash2, Pencil, Plus, Copy, KeyRound, ScrollText, Play } from 'lucide-react';
+import { Users, Shield, Loader2, AlertCircle, Check, X, Network, HardDrive, Bell, Server, Trash2, Pencil, Plus, Copy, KeyRound, ScrollText, Play, Mail } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import {
   fetchUsers, updateUser, fetchAdminSettings, updateAdminSettings,
   fetchLdapSettings, updateLdapSettings, testLdapConnection,
-  fetchGfsSettings, updateGfsSettings, fetchAdminNotifySettings, updateNotifySettings,
-  fetchAdminHosts, createHost, deleteHost, updateHostContainers, updateHostTimer,
+  fetchGfsSettings, updateGfsSettings, fetchAdminNotifySettings, updateNotifySettings, sendTestEmail,
+  fetchAdminHosts, createHost, deleteHost, updateHostContainers, updateHostEmails, updateHostTimer,
   testHostConnection, fetchVaultPublicKey, fetchAuditLog, triggerPruneNow,
 } from '../services/api';
 
@@ -17,7 +17,11 @@ const EMPTY_LDAP = {
 };
 
 const EMPTY_GFS = { GH: 24, GD: 7, GW: 4, GM: 12, GY: 3 };
-const EMPTY_NOTIFY = { pushover_token: '', pushover_user: '', slack_url: '' };
+const EMPTY_NOTIFY = {
+  pushover_token: '', pushover_user: '', slack_url: '',
+  smtp_host: '', smtp_port: '587', smtp_tls_mode: 'starttls', smtp_from: '',
+  smtp_user: '', smtp_pass: '',
+};
 
 const Admin = () => {
   const { t } = useTranslation();
@@ -48,6 +52,9 @@ const Admin = () => {
   const [notifySaving, setNotifySaving] = useState(false);
   const [notifyError, setNotifyError] = useState(null);
   const [notifySuccess, setNotifySuccess] = useState(null);
+  const [testEmailTo, setTestEmailTo] = useState('');
+  const [testingEmail, setTestingEmail] = useState(false);
+  const [testEmailResult, setTestEmailResult] = useState(null);
 
   const [hosts, setHosts] = useState([]);
   const [hostsError, setHostsError] = useState(null);
@@ -57,6 +64,9 @@ const Admin = () => {
   const [editingHost, setEditingHost] = useState(null); // host being container-edited
   const [editingContainersText, setEditingContainersText] = useState('');
   const [savingContainers, setSavingContainers] = useState(false);
+  const [editingEmailsHost, setEditingEmailsHost] = useState(null);
+  const [editingEmailsText, setEditingEmailsText] = useState('');
+  const [savingEmails, setSavingEmails] = useState(false);
   const [testingHost, setTestingHost] = useState(null);
   const [hostTestResults, setHostTestResults] = useState({});
   const [testingNewHost, setTestingNewHost] = useState(false);
@@ -221,7 +231,25 @@ const Admin = () => {
     }
   };
 
+  const handleSendTestEmail = async () => {
+    const to = testEmailTo.trim();
+    if (!to) return;
+    setTestingEmail(true);
+    setTestEmailResult(null);
+    try {
+      const result = await sendTestEmail(to);
+      setTestEmailResult(result);
+    } catch (err) {
+      setTestEmailResult({ success: false, message: err.message });
+    } finally {
+      setTestingEmail(false);
+    }
+  };
+
   const parseContainersText = (text) =>
+    text.split('\n').map((s) => s.trim()).filter(Boolean);
+
+  const parseEmailsText = (text) =>
     text.split('\n').map((s) => s.trim()).filter(Boolean);
 
   const handleAddHost = async () => {
@@ -269,6 +297,26 @@ const Admin = () => {
       setHostsError(err.message);
     } finally {
       setSavingContainers(false);
+    }
+  };
+
+  const handleStartEditEmails = (h) => {
+    setEditingEmailsHost(h.host);
+    setEditingEmailsText((h.emails || []).join('\n'));
+  };
+
+  const handleSaveEmails = async (host) => {
+    setSavingEmails(true);
+    setHostsError(null);
+    try {
+      const emails = parseEmailsText(editingEmailsText);
+      const updated = await updateHostEmails(host, emails);
+      setHosts(hosts.map((h) => (h.host === host ? { ...h, emails: updated.emails } : h)));
+      setEditingEmailsHost(null);
+    } catch (err) {
+      setHostsError(err.message);
+    } finally {
+      setSavingEmails(false);
     }
   };
 
@@ -483,6 +531,7 @@ const Admin = () => {
               <tr>
                 <th className="px-4 py-3 font-medium">{t('admin.hosts.colHost')}</th>
                 <th className="px-4 py-3 font-medium">{t('admin.hosts.colContainers')}</th>
+                <th className="px-4 py-3 font-medium">{t('admin.hosts.colEmails')}</th>
                 <th className="px-4 py-3 font-medium">{t('admin.hosts.colTimer')}</th>
                 <th className="px-4 py-3 font-medium text-right">{t('admin.actions')}</th>
               </tr>
@@ -553,6 +602,52 @@ const Admin = () => {
                     )}
                   </td>
                   <td className="px-4 py-3">
+                    {editingEmailsHost === h.host ? (
+                      <div className="space-y-2">
+                        <textarea
+                          value={editingEmailsText}
+                          onChange={(e) => setEditingEmailsText(e.target.value)}
+                          rows={Math.max(2, editingEmailsText.split('\n').length)}
+                          className="w-full bg-background border border-border rounded px-2 py-1 text-text text-sm font-mono focus:outline-none focus:border-primary"
+                          placeholder={t('admin.hosts.oneEmailPerLine')}
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleSaveEmails(h.host)}
+                            disabled={savingEmails}
+                            className="flex items-center gap-1 px-2 py-1 bg-primary hover:bg-primary-hover text-white rounded text-xs font-medium transition-colors disabled:opacity-50"
+                          >
+                            {savingEmails ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                            {t('admin.gfs.save')}
+                          </button>
+                          <button
+                            onClick={() => setEditingEmailsHost(null)}
+                            className="px-2 py-1 bg-surface-hover hover:bg-border text-text rounded text-xs font-medium transition-colors"
+                          >
+                            {t('admin.hosts.cancel')}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {(h.emails || []).length === 0 ? (
+                          <span className="text-text-muted italic">{t('admin.hosts.noEmails')}</span>
+                        ) : (
+                          h.emails.map((e) => (
+                            <span key={e} className="px-2 py-0.5 rounded bg-surface-hover text-text text-xs font-mono">{e}</span>
+                          ))
+                        )}
+                        <button
+                          onClick={() => handleStartEditEmails(h)}
+                          className="p-1 text-text-muted hover:text-primary hover:bg-primary/10 rounded transition-colors"
+                          title={t('admin.hosts.editEmails')}
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
                     <button
                       onClick={() => handleToggleTimer(h)}
                       className={`relative w-11 h-6 rounded-full transition-colors ${h.timer_enabled ? 'bg-primary' : 'bg-surface-hover'}`}
@@ -574,7 +669,7 @@ const Admin = () => {
               ))}
               {hosts.length === 0 && (
                 <tr>
-                  <td colSpan="4" className="px-4 py-8 text-center text-text-muted">{t('admin.hosts.noHosts')}</td>
+                  <td colSpan="5" className="px-4 py-8 text-center text-text-muted">{t('admin.hosts.noHosts')}</td>
                 </tr>
               )}
             </tbody>
@@ -758,7 +853,79 @@ const Admin = () => {
             />
           </div>
 
-          <div className="pt-2">
+          <div className="border-t border-border pt-4">
+            <p className="text-sm font-medium text-text-muted mb-1">{t('admin.notify.smtpTitle')}</p>
+            <p className="text-xs text-text-muted mb-3">{t('admin.notify.smtpHint')}</p>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-sm text-text-muted mb-1">{t('admin.notify.smtpHost')}</label>
+                <input
+                  type="text"
+                  value={notify.smtp_host}
+                  onChange={(e) => setNotify((p) => ({ ...p, smtp_host: e.target.value }))}
+                  placeholder="relay.example.com"
+                  className="w-full bg-background border border-border rounded px-3 py-2 text-text text-sm focus:outline-none focus:border-primary font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-text-muted mb-1">{t('admin.notify.smtpPort')}</label>
+                <input
+                  type="text"
+                  value={notify.smtp_port}
+                  onChange={(e) => setNotify((p) => ({ ...p, smtp_port: e.target.value }))}
+                  placeholder="587"
+                  className="w-full bg-background border border-border rounded px-3 py-2 text-text text-sm focus:outline-none focus:border-primary font-mono"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-sm text-text-muted mb-1">{t('admin.notify.smtpTlsMode')}</label>
+                <select
+                  value={notify.smtp_tls_mode}
+                  onChange={(e) => setNotify((p) => ({ ...p, smtp_tls_mode: e.target.value }))}
+                  className="w-full bg-background border border-border rounded px-3 py-2 text-text text-sm focus:outline-none focus:border-primary"
+                >
+                  <option value="starttls">{t('admin.notify.smtpTlsStarttls')}</option>
+                  <option value="implicit">{t('admin.notify.smtpTlsImplicit')}</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm text-text-muted mb-1">{t('admin.notify.smtpFrom')}</label>
+                <input
+                  type="text"
+                  value={notify.smtp_from}
+                  onChange={(e) => setNotify((p) => ({ ...p, smtp_from: e.target.value }))}
+                  placeholder="nspawn-vault@example.com"
+                  className="w-full bg-background border border-border rounded px-3 py-2 text-text text-sm focus:outline-none focus:border-primary font-mono"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm text-text-muted mb-1">{t('admin.notify.smtpUser')}</label>
+                <input
+                  type="text"
+                  value={notify.smtp_user}
+                  onChange={(e) => setNotify((p) => ({ ...p, smtp_user: e.target.value }))}
+                  placeholder={t('admin.notify.secretPlaceholder')}
+                  className="w-full bg-background border border-border rounded px-3 py-2 text-text text-sm focus:outline-none focus:border-primary font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-text-muted mb-1">{t('admin.notify.smtpPass')}</label>
+                <input
+                  type="password"
+                  value={notify.smtp_pass}
+                  onChange={(e) => setNotify((p) => ({ ...p, smtp_pass: e.target.value }))}
+                  placeholder={t('admin.notify.secretPlaceholder')}
+                  className="w-full bg-background border border-border rounded px-3 py-2 text-text text-sm focus:outline-none focus:border-primary"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-2 flex items-center gap-3">
             <button
               onClick={handleNotifySave}
               disabled={notifySaving}
@@ -767,6 +934,34 @@ const Admin = () => {
               {notifySaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
               {t('admin.notify.save')}
             </button>
+          </div>
+
+          <div className="border-t border-border pt-4">
+            <p className="text-sm font-medium text-text-muted mb-1">{t('admin.notify.testEmailTitle')}</p>
+            <p className="text-xs text-text-muted mb-3">{t('admin.notify.testEmailHint')}</p>
+            <div className="flex items-center gap-3">
+              <input
+                type="email"
+                value={testEmailTo}
+                onChange={(e) => setTestEmailTo(e.target.value)}
+                placeholder="you@example.com"
+                className="flex-1 bg-background border border-border rounded px-3 py-2 text-text text-sm focus:outline-none focus:border-primary font-mono"
+              />
+              <button
+                onClick={handleSendTestEmail}
+                disabled={testingEmail || !testEmailTo.trim()}
+                className="flex items-center gap-2 px-4 py-2 bg-surface-hover hover:bg-border text-text rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+              >
+                {testingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                {t('admin.notify.sendTestEmail')}
+              </button>
+            </div>
+            {testEmailResult && (
+              <div className={`mt-3 p-3 rounded-lg text-sm flex items-center gap-2 ${testEmailResult.success ? 'bg-green-500/10 border border-green-500/20 text-green-400' : 'bg-red-500/10 border border-red-500/20 text-red-400'}`}>
+                {testEmailResult.success ? <Check className="w-4 h-4 shrink-0" /> : <X className="w-4 h-4 shrink-0" />}
+                {testEmailResult.message}
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -109,6 +109,29 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-check.timer nspawn-vault-prune.timer
 
 %changelog
+* Fri Jul 10 2026 Developer <dev@example.com> - 0.1.0-9
+- Adds email as a third dead-man's-switch alert channel alongside
+  Pushover/Slack, via a shared SMTP relay config (new SMTP_* keys in
+  notify.conf) and new per-source-host recipients in
+  %{_sysconfdir}/nspawn-vault/<host>/notify-email (one address per line) -
+  built for a ~200-host fleet where different people need to be told about
+  different source hosts, not one global recipient list. New
+  usr/libexec/nspawn-vault/send-email.sh sends via curl (STARTTLS/587 or
+  implicit TLS/465, both configurable), shared by check-stale.sh and
+  nspawn-vault-web's new "send test email" admin button.
+- check-stale.sh now loops configured hosts/containers
+  (%{_sysconfdir}/nspawn-vault/<host>/containers) instead of globbing
+  %{_sharedstatedir}/nspawn-vault/state/*.json directly - needed to know
+  which host a container belongs to (the state filename alone can't be
+  split back into an unambiguous host/container pair), and brings it in
+  line with how nspawn-vault-web already enumerates hosts. Existing
+  per-container Pushover/Slack alerts are unchanged; email is batched one
+  message per host (listing every problem container) rather than one email
+  per container, to avoid flooding two recipients across a large fleet.
+- SMTP_USER/SMTP_PASS go through the same shell-quoting as the existing
+  Pushover/Slack secrets (gotcha #1 - check-stale.sh sources notify.conf as
+  root) - re-verified live with a $()/backtick injection payload, stays inert.
+
 * Tue Jul 07 2026 Developer <dev@example.com> - 0.1.0-8
 - %%post now explicitly `systemctl enable --now`s nspawn-vault-check.timer
   and nspawn-vault-prune.timer instead of relying solely on %%systemd_post's

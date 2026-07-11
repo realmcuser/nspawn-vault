@@ -15,6 +15,11 @@ _KV_RE = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*(#.*)?$")
 # characters before ever touching the filesystem.
 _HOSTNAME_RE = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$")
 _CONTAINER_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+# Deliberately simple (not RFC 5322) - this only needs to reject anything that
+# could act as a curl/shell option or metacharacter when notify-email lines
+# are later passed to send-email.sh's --mail-rcpt, not validate every
+# technically-legal email address.
+_EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
 
 
 def validate_hostname(host: str) -> None:
@@ -25,6 +30,11 @@ def validate_hostname(host: str) -> None:
 def validate_container_name(name: str) -> None:
     if not _CONTAINER_NAME_RE.match(name):
         raise ValueError(f"invalid container name: {name!r}")
+
+
+def validate_email(address: str) -> None:
+    if not _EMAIL_RE.match(address):
+        raise ValueError(f"invalid email address: {address!r}")
 
 
 def _parse_shell_kv(path: Path) -> dict:
@@ -56,6 +66,33 @@ def read_containers(host: str) -> list[str]:
             continue
         names.append(stripped)
     return names
+
+
+def read_host_emails(host: str) -> list[str]:
+    """Per-host email alert recipients (separate from the global
+    Pushover/Slack config in notify.conf) - one address per line in
+    <host>/notify-email, mirrors read_containers()'s own format/filtering."""
+    path = NSPAWN_VAULT_ETC / host / "notify-email"
+    if not path.is_file():
+        return []
+    addrs = []
+    for line in path.read_text().splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        addrs.append(stripped)
+    return addrs
+
+
+def write_host_emails(host: str, addresses: list[str]) -> None:
+    validate_hostname(host)
+    for addr in addresses:
+        validate_email(addr)
+    path = NSPAWN_VAULT_ETC / host / "notify-email"
+    if not path.parent.is_dir():
+        raise ValueError(f"host not found: {host}")
+    text = "".join(f"{a}\n" for a in addresses)
+    path.write_text(text)
 
 
 def list_configured_hosts() -> list[str]:
@@ -144,17 +181,27 @@ def read_notify_conf() -> dict:
     return {
         "pushover_configured": bool(values.get("PUSHOVER_TOKEN")) and bool(values.get("PUSHOVER_USER")),
         "slack_configured": bool(values.get("SLACK_URL")),
+        "smtp_configured": bool(values.get("SMTP_HOST")),
     }
 
 
 def read_notify_conf_masked() -> dict:
     """For the admin edit form: never return real secret values, only a
-    sentinel when something is already set (same pattern as LDAP bind_password)."""
+    sentinel when something is already set (same pattern as LDAP bind_password).
+    SMTP_HOST/PORT/TLS_MODE/FROM are not secrets and come back as-is; only
+    SMTP_USER/SMTP_PASS follow the sentinel convention (a relay username can
+    be sensitive enough to not want it echoed back either)."""
     values = _parse_shell_kv(NSPAWN_VAULT_ETC / "notify.conf")
     return {
         "pushover_token": SECRET_SENTINEL if values.get("PUSHOVER_TOKEN") else "",
         "pushover_user": SECRET_SENTINEL if values.get("PUSHOVER_USER") else "",
         "slack_url": SECRET_SENTINEL if values.get("SLACK_URL") else "",
+        "smtp_host": values.get("SMTP_HOST", ""),
+        "smtp_port": values.get("SMTP_PORT", "587"),
+        "smtp_tls_mode": values.get("SMTP_TLS_MODE", "starttls"),
+        "smtp_from": values.get("SMTP_FROM", ""),
+        "smtp_user": SECRET_SENTINEL if values.get("SMTP_USER") else "",
+        "smtp_pass": SECRET_SENTINEL if values.get("SMTP_PASS") else "",
     }
 
 
@@ -172,6 +219,8 @@ def write_notify_conf(values: dict) -> None:
     token = resolve(values.get("pushover_token"), "PUSHOVER_TOKEN")
     user = resolve(values.get("pushover_user"), "PUSHOVER_USER")
     slack = resolve(values.get("slack_url"), "SLACK_URL")
+    smtp_user = resolve(values.get("smtp_user"), "SMTP_USER")
+    smtp_pass = resolve(values.get("smtp_pass"), "SMTP_PASS")
 
     lines = [
         "# Pushover for the dead-man's-switch alert - managed via nspawn-vault-web Admin",
@@ -179,6 +228,16 @@ def write_notify_conf(values: dict) -> None:
         f"PUSHOVER_USER={_shell_quote(user)}",
         "# Slack webhook (optional)",
         f"SLACK_URL={_shell_quote(slack)}",
+        # check-stale.sh `source`s this file as root - every value below MUST
+        # go through _shell_quote(), same as the fields above (gotcha #1).
+        "# SMTP relay for email alerts (optional) - who actually gets emailed",
+        "# per source host is in <host>/notify-email, not here.",
+        f"SMTP_HOST={_shell_quote(values.get('smtp_host') or '')}",
+        f"SMTP_PORT={_shell_quote(str(values.get('smtp_port') or '587'))}",
+        f"SMTP_TLS_MODE={_shell_quote(values.get('smtp_tls_mode') or 'starttls')}",
+        f"SMTP_FROM={_shell_quote(values.get('smtp_from') or '')}",
+        f"SMTP_USER={_shell_quote(smtp_user)}",
+        f"SMTP_PASS={_shell_quote(smtp_pass)}",
         "",
     ]
     path = NSPAWN_VAULT_ETC / "notify.conf"

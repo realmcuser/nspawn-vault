@@ -10,6 +10,7 @@ import vault_state
 import vault_zfs
 import vault_systemd
 import vault_ssh
+import vault_email
 import vault_archive
 import vault_audit
 from auth_routes import get_current_user, get_current_admin, get_current_admin_from_query_token, get_db
@@ -29,6 +30,20 @@ class NotifySettingsMasked(BaseModel):
     pushover_token: str = ""
     pushover_user: str = ""
     slack_url: str = ""
+    smtp_host: str = ""
+    smtp_port: str = "587"
+    smtp_tls_mode: str = "starttls"
+    smtp_from: str = ""
+    smtp_user: str = ""
+    smtp_pass: str = ""
+
+
+class TestEmailRequest(BaseModel):
+    to: str
+
+
+class HostEmailsUpdate(BaseModel):
+    emails: list[str]
 
 
 class HostCreate(BaseModel):
@@ -344,6 +359,18 @@ async def update_notify_settings(data: NotifySettingsMasked, current_user=Depend
     return vault_config.read_notify_conf_masked()
 
 
+@router.post("/api/admin/settings/notify/test-email")
+async def test_email_admin(data: TestEmailRequest, current_user=Depends(get_current_admin)):
+    """Sends one real email right now via the currently-saved SMTP relay
+    config, so setting up email alerts doesn't mean waiting for a real
+    dead-man's-switch trigger to find out the relay config was wrong."""
+    try:
+        vault_config.validate_email(data.to)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return vault_email.send_test_email(data.to)
+
+
 @router.get("/api/admin/hosts")
 async def list_hosts_admin(current_user=Depends(get_current_admin)):
     """Configuration view (which hosts/containers are set up to be pulled,
@@ -354,6 +381,7 @@ async def list_hosts_admin(current_user=Depends(get_current_admin)):
         hosts.append({
             "host": host,
             "containers": vault_config.read_containers(host),
+            "emails": vault_config.read_host_emails(host),
             "timer_enabled": vault_systemd.timer_enabled(f"nspawn-vault-pull@{host}.timer"),
         })
     return hosts
@@ -422,6 +450,21 @@ async def update_containers_admin(host: str, data: ContainersUpdate, current_use
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {"host": host, "containers": data.containers}
+
+
+@router.put("/api/admin/hosts/{host}/emails")
+async def update_host_emails_admin(host: str, data: HostEmailsUpdate, current_user=Depends(get_current_admin)):
+    """Who gets emailed (in addition to the global Pushover/Slack alerts)
+    when THIS source host's dead-man's-switch fires - check-stale.sh reads
+    this same file directly, not through this app."""
+    host = unquote(host)
+    if host not in vault_config.list_configured_hosts():
+        raise HTTPException(status_code=404, detail="Host not found")
+    try:
+        vault_config.write_host_emails(host, data.emails)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"host": host, "emails": data.emails}
 
 
 @router.put("/api/admin/hosts/{host}/timer")
