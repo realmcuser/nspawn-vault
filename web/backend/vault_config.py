@@ -37,6 +37,24 @@ def validate_email(address: str) -> None:
         raise ValueError(f"invalid email address: {address!r}")
 
 
+def _atomic_write_text(path: Path, text: str, mode: int | None = None) -> None:
+    """Writes via a temp file in the same directory + os.replace(), instead
+    of Path.write_text() straight onto the target - write_text() truncates
+    the existing file in place before writing the new content, so a
+    concurrent reader (check-stale.sh's 30-minute timer sourcing
+    notify.conf, or someone clicking "send test email" right as a save is
+    in flight) has a real, if narrow, window to read a half-written file.
+    os.replace() is an atomic rename on the same filesystem - a reader
+    always sees either the complete old file or the complete new one.
+    `mode` is applied to the temp file *before* the rename so the target
+    never briefly exists with the wrong (looser) permissions."""
+    tmp = path.with_name(f".{path.name}.tmp-{os.getpid()}")
+    tmp.write_text(text)
+    if mode is not None:
+        os.chmod(tmp, mode)
+    os.replace(tmp, path)
+
+
 def _parse_shell_kv(path: Path) -> dict:
     """Extracts KEY=VALUE pairs from a shell-sourceable config file without
     executing it — these files are trusted content but we still don't want to
@@ -92,7 +110,7 @@ def write_host_emails(host: str, addresses: list[str]) -> None:
     if not path.parent.is_dir():
         raise ValueError(f"host not found: {host}")
     text = "".join(f"{a}\n" for a in addresses)
-    path.write_text(text)
+    _atomic_write_text(path, text)
 
 
 def list_configured_hosts() -> list[str]:
@@ -113,7 +131,7 @@ def write_containers(host: str, containers: list[str]) -> None:
     if not path.parent.is_dir():
         raise ValueError(f"host not found: {host}")
     text = "".join(f"{c}\n" for c in containers)
-    path.write_text(text)
+    _atomic_write_text(path, text)
 
 
 def create_host(host: str, containers: list[str]) -> None:
@@ -162,7 +180,7 @@ def write_gfs_conf(values: dict) -> None:
         "",
     ]
     path = NSPAWN_VAULT_ETC / "gfs.conf"
-    path.write_text("\n".join(lines))
+    _atomic_write_text(path, "\n".join(lines))
 
 
 SECRET_SENTINEL = "********"
@@ -241,8 +259,7 @@ def write_notify_conf(values: dict) -> None:
         "",
     ]
     path = NSPAWN_VAULT_ETC / "notify.conf"
-    path.write_text("\n".join(lines))
-    os.chmod(path, 0o600)
+    _atomic_write_text(path, "\n".join(lines), mode=0o600)
 
 
 def pool_name() -> str:

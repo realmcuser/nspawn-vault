@@ -120,6 +120,25 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-web.service
 
 %changelog
+* Sat Jul 11 2026 Developer <dev@example.com> - 0.1.0-26
+- write_containers/write_host_emails/write_gfs_conf/write_notify_conf now
+  write via a temp file + os.replace() instead of Path.write_text()
+  straight onto the target - write_text() truncates the existing file in
+  place before writing, leaving a real (if narrow) window where a
+  concurrent reader (check-stale.sh's 30-minute timer sourcing notify.conf,
+  or a "send test email" click landing mid-save) could read a
+  partially-written file. Found live 2026-07-11 while setting up the new
+  SMTP relay settings - several "send test email" attempts got an
+  intermittent curl "login denied", some immediately following an Admin
+  save. os.replace() is an atomic rename on the same filesystem, so a
+  reader now always sees either the complete old file or the complete new
+  one, never a partial one. notify.conf's 0600 permissions are applied to
+  the temp file before the rename, so the target never briefly exists with
+  looser permissions either. Verified with a 200-write/4000-read
+  concurrent stress test (zero partial reads) and re-ran the existing
+  shell-quoting injection test against the refactored write path (still
+  inert).
+
 * Fri Jul 10 2026 Developer <dev@example.com> - 0.1.0-25
 - Adds email alert configuration to Admin: SMTP relay settings (host, port,
   STARTTLS/implicit TLS, from address, optional auth) in the Notifications
