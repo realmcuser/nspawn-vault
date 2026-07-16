@@ -22,6 +22,7 @@ const EMPTY_NOTIFY = {
   smtp_host: '', smtp_port: '587', smtp_tls_mode: 'starttls', smtp_from: '',
   smtp_user: '', smtp_pass: '',
   ransomware_diff_threshold: '500',
+  alert_backoff_hours: '6',
 };
 
 const Admin = () => {
@@ -852,6 +853,22 @@ const Admin = () => {
               placeholder={t('admin.notify.secretPlaceholder')}
               className="w-full bg-background border border-border rounded px-3 py-2 text-text text-sm focus:outline-none focus:border-primary font-mono"
             />
+          </div>
+
+          <div className="border-t border-border pt-4">
+            <p className="text-sm font-medium text-text-muted mb-1">{t('admin.notify.backoffTitle')}</p>
+            <p className="text-xs text-text-muted mb-3">{t('admin.notify.backoffHint')}</p>
+            <div className="max-w-xs">
+              <label className="block text-sm text-text-muted mb-1">{t('admin.notify.backoffHours')}</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={notify.alert_backoff_hours}
+                onChange={(e) => setNotify((p) => ({ ...p, alert_backoff_hours: e.target.value }))}
+                placeholder="6"
+                className="w-full bg-background border border-border rounded px-3 py-2 text-text text-sm focus:outline-none focus:border-primary font-mono"
+              />
+            </div>
           </div>
 
           <div className="border-t border-border pt-4">

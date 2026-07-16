@@ -120,6 +120,14 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-web.service
 
 %changelog
+* Thu Jul 16 2026 Developer <dev@example.com> - 0.1.0-28
+- Exposes the new ALERT_BACKOFF_HOURS setting (nspawn-vault 0.1.0-11) in
+  Admin > Notifications - a new "Repeat-alert backoff" field, plaintext
+  like the ransomware threshold (not a secret), validated digits-only
+  server-side and written through the same shell-quoting-safe path as
+  every other notify.conf field. GET/PUT /api/admin/settings/notify carry
+  it through unchanged otherwise.
+
 * Thu Jul 16 2026 Developer <dev@example.com> - 0.1.0-27
 - Threads through a new "ransomware_suspected" status the engine can now set
   on a container (see nspawn-vault 0.1.0-10's zfs-diff heuristic in pull.sh):

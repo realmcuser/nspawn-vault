@@ -16,6 +16,16 @@ SMTP_USER=
 SMTP_PASS=
 SMTP_FROM=nspawn-vault@example.com
 
+# Upprepningsspärr för larm (valfri): så länge ett problem kvarstår över
+# flera check-stale.sh-körningar (var 30:e minut) larmas det bara igen var
+# ALERT_BACKOFF_HOURS:e timme, inte varje körning - annars blir t.ex. en
+# källserver som ligger nere en hel natt en hel salva mejl/Pushover/Slack.
+# Gäller både staleness/failed-larmet och ransomware-larmet nedan, var för
+# sig per container. Sätt till 0 för att larma vid varje körning (gamla
+# beteendet). Exit-koden/journalen påverkas inte - bara vilka larm som
+# faktiskt skickas ut.
+ALERT_BACKOFF_HOURS=6
+
 # Ransomware-heuristik (valfri): pull.sh jämför varje ny snapshot mot
 # föregående via "zfs diff" och räknar antalet ändrade/tillagda/borttagna
 # filer. Om antalet når detta tröskelvärde flaggas containern som

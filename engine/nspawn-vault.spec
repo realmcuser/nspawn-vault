@@ -109,6 +109,29 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-check.timer nspawn-vault-prune.timer
 
 %changelog
+* Thu Jul 16 2026 Developer <dev@example.com> - 0.1.0-11
+- Adds a repeat-alert backoff to check-stale.sh: previously, an ongoing
+  incident (a source host down for hours) re-fired Pushover/Slack/email on
+  every single 30-minute run for as long as it stayed unresolved. A small
+  marker file per (host, container, problem-kind) under the new
+  /var/lib/nspawn-vault/state/alerted/ now records the epoch of the last
+  alert sent; a repeat alert for the same still-unresolved problem is
+  suppressed until ALERT_BACKOFF_HOURS (new notify.conf key, default 6,
+  0 disables backoff entirely) has passed. Applies independently to both
+  the staleness/failed alert and the new ransomware alert (0.1.0-10) per
+  container. The marker is cleared as soon as the container is next seen
+  OK/clean, so a genuinely new incident always alerts immediately - only
+  a *persisting* one gets throttled. Exit code and journal output
+  (`SUPPRESSED (backoff): ...`) are unaffected either way, so
+  `systemctl status`/journal always reflect the real current state even
+  while outbound notifications are being throttled.
+- Found live 2026-07-16: an overnight outage on one source host produced
+  a real burst of automated stale-alert emails, on an account that also
+  had a vacation autoresponder running - plausibly enough combined
+  outbound traffic to trip the SMTP relay's own anti-abuse auth lock
+  (unconfirmed, separate/pre-existing issue, not itself fixed by this
+  change - see nspawn-vault-web 0.1.0-28 for the matching Admin field).
+
 * Thu Jul 16 2026 Developer <dev@example.com> - 0.1.0-10
 - Adds a ransomware-detection heuristic to pull.sh: after every successful
   snapshot, diffs it against the previous one via `zfs diff` (cheap - reads

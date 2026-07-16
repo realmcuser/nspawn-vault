@@ -37,6 +37,7 @@ class NotifySettingsMasked(BaseModel):
     smtp_user: str = ""
     smtp_pass: str = ""
     ransomware_diff_threshold: str = "500"
+    alert_backoff_hours: str = "6"
 
 
 class TestEmailRequest(BaseModel):

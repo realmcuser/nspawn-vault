@@ -47,6 +47,39 @@ send_host_email() {
         "$body" >/dev/null 2>&1 || echo "WARNING: email alert to ${host} failed" >&2
 }
 
+# Repeat-alert backoff: without this, an ongoing incident (e.g. a source
+# host down for hours) re-fires Pushover/Slack/email on every single
+# 30-minute check-stale.sh run for as long as it stays unresolved - fine
+# for a handful of hosts, a real noise problem at ~200. A small marker file
+# per (host, container, problem-kind) records the epoch of the last alert
+# sent; should_notify() only allows a new alert once ALERT_BACKOFF_HOURS
+# has passed since the previous one for that specific problem. 0 disables
+# backoff (always alert, matches the pre-2026-07-16 behavior). The exit
+# code and journal output are NOT gated by this - only the outbound
+# notification channels are, so `systemctl status` still reflects reality
+# even while notifications are suppressed.
+ALERT_STATE_DIR=/var/lib/nspawn-vault/state/alerted
+mkdir -p "$ALERT_STATE_DIR"
+ALERT_BACKOFF_HOURS="${ALERT_BACKOFF_HOURS:-6}"
+case "$ALERT_BACKOFF_HOURS" in ''|*[!0-9]*) ALERT_BACKOFF_HOURS=6 ;; esac
+
+should_notify() {
+    local key="$1" marker="$ALERT_STATE_DIR/$1" last elapsed
+    [ "$ALERT_BACKOFF_HOURS" -le 0 ] && return 0
+    [ -f "$marker" ] || return 0
+    last=$(cat "$marker" 2>/dev/null || echo 0)
+    elapsed=$(( (now - last) / 3600 ))
+    [ "$elapsed" -ge "$ALERT_BACKOFF_HOURS" ]
+}
+
+mark_notified() {
+    echo "$now" > "$ALERT_STATE_DIR/$1"
+}
+
+clear_notified() {
+    rm -f "$ALERT_STATE_DIR/$1"
+}
+
 now=$(date +%s)
 errors=0
 hosts_found=0
@@ -82,24 +115,39 @@ for host_dir in "$ETC_DIR"/*/; do
         fi
         age=$(( (now - ts) / 60 ))
 
+        key_stale="${host}_${name}_stale"
         if [ "$result" != "success" ] || [ "$age" -gt "$THRESHOLD_MIN" ]; then
             reason="result=${result}, age=${age}min (threshold=${THRESHOLD_MIN}min)"
-            send_alert "${label}: ${reason}"
-            host_problems="${host_problems}- ${name}: ${reason}\n"
             errors=$((errors+1))
+            if should_notify "$key_stale"; then
+                send_alert "${label}: ${reason}"
+                host_problems="${host_problems}- ${name}: ${reason}\n"
+                mark_notified "$key_stale"
+            else
+                echo "SUPPRESSED (backoff): ${label}: ${reason}" >&2
+            fi
         else
             echo "OK: ${label} (${age}min sedan)" >&2
+            clear_notified "$key_stale"
         fi
 
         # Ransomware-heuristik satt av pull.sh (zfs diff mot föregående
         # snapshot) - oberoende av success/stale-kollen ovan, eftersom en
         # pull kan lyckas helt normalt samtidigt som innehållet är
         # misstänkt krypterat.
+        key_ransomware="${host}_${name}_ransomware"
         if [ "$ransomware" = "1" ]; then
             reason="misstänkt ransomware: ${changed} ändrade filer sedan föregående snapshot"
-            send_alert "${label}: ${reason}"
-            host_problems="${host_problems}- ${name}: ${reason}\n"
             errors=$((errors+1))
+            if should_notify "$key_ransomware"; then
+                send_alert "${label}: ${reason}"
+                host_problems="${host_problems}- ${name}: ${reason}\n"
+                mark_notified "$key_ransomware"
+            else
+                echo "SUPPRESSED (backoff): ${label}: ${reason}" >&2
+            fi
+        else
+            clear_notified "$key_ransomware"
         fi
     done < "${host_dir}containers"
 

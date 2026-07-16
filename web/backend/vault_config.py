@@ -200,11 +200,16 @@ def read_notify_conf() -> dict:
         ransomware_threshold = int(values.get("RANSOMWARE_DIFF_THRESHOLD", 500))
     except ValueError:
         ransomware_threshold = 500
+    try:
+        alert_backoff_hours = int(values.get("ALERT_BACKOFF_HOURS", 6))
+    except ValueError:
+        alert_backoff_hours = 6
     return {
         "pushover_configured": bool(values.get("PUSHOVER_TOKEN")) and bool(values.get("PUSHOVER_USER")),
         "slack_configured": bool(values.get("SLACK_URL")),
         "smtp_configured": bool(values.get("SMTP_HOST")),
         "ransomware_diff_threshold": ransomware_threshold,
+        "alert_backoff_hours": alert_backoff_hours,
     }
 
 
@@ -226,6 +231,7 @@ def read_notify_conf_masked() -> dict:
         "smtp_user": SECRET_SENTINEL if values.get("SMTP_USER") else "",
         "smtp_pass": SECRET_SENTINEL if values.get("SMTP_PASS") else "",
         "ransomware_diff_threshold": values.get("RANSOMWARE_DIFF_THRESHOLD", "500"),
+        "alert_backoff_hours": values.get("ALERT_BACKOFF_HOURS", "6"),
     }
 
 
@@ -250,6 +256,10 @@ def write_notify_conf(values: dict) -> None:
     if not ransomware_threshold.isdigit():
         raise ValueError(f"invalid ransomware diff threshold: {ransomware_threshold!r}")
 
+    alert_backoff_hours = str(values.get("alert_backoff_hours") or "6").strip()
+    if not alert_backoff_hours.isdigit():
+        raise ValueError(f"invalid alert backoff hours: {alert_backoff_hours!r}")
+
     lines = [
         "# Pushover for the dead-man's-switch alert - managed via nspawn-vault-web Admin",
         f"PUSHOVER_TOKEN={_shell_quote(token)}",
@@ -268,6 +278,8 @@ def write_notify_conf(values: dict) -> None:
         f"SMTP_PASS={_shell_quote(smtp_pass)}",
         "# Ransomware-heuristik (0 = av) - se notify.conf.example för detaljer",
         f"RANSOMWARE_DIFF_THRESHOLD={_shell_quote(ransomware_threshold)}",
+        "# Upprepningsspärr för larm, timmar (0 = larma varje check-stale.sh-körning)",
+        f"ALERT_BACKOFF_HOURS={_shell_quote(alert_backoff_hours)}",
         "",
     ]
     path = NSPAWN_VAULT_ETC / "notify.conf"
