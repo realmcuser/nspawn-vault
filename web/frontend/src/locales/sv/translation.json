@@ -54,7 +54,8 @@
     "compressionNone": "Okomprimerad (.tar)",
     "browseTitle": "Bläddra: {{container}}",
     "emptyDirectory": "Tom katalog.",
-    "loadMore": "Visar {{shown}} av {{total}} - visa fler"
+    "loadMore": "Visar {{shown}} av {{total}} - visa fler",
+    "ransomwareHint": "Misstänkt ransomware: {{count}} ändrade filer sedan föregående snapshot."
   },
   "alert": {
     "staleTitle": "Backup(er) ej bekräftat friska",
@@ -64,6 +65,10 @@
     "pullRunningBody": "{{count}} pull-backup(er) pågår just nu.",
     "pullRunningBody_one": "1 pull-backup pågår just nu.",
     "pullRunningBody_other": "{{count}} pull-backuper pågår just nu.",
+    "ransomwareTitle": "Misstänkt ransomware",
+    "ransomwareBody": "{{count}} källservrar har en container med ovanligt många ändrade filer sedan föregående snapshot. Klicka på en server nedan för att undersöka - GFS-snapshots finns kvar att återställa från.",
+    "ransomwareBody_one": "1 källserver har en container med ovanligt många ändrade filer sedan föregående snapshot. Klicka nedan för att undersöka - GFS-snapshots finns kvar att återställa från.",
+    "ransomwareBody_other": "{{count}} källservrar har en container med ovanligt många ändrade filer sedan föregående snapshot. Klicka på en server nedan för att undersöka - GFS-snapshots finns kvar att återställa från.",
     "zfsTitle": "Problem med ZFS-kärnmodulen",
     "zfsNotLoaded": "ZFS-kärnmodulen är inte laddad för den körande kärnan ({{kernel}}). Alla pullar, pruningar och dataset-läsningar på det här valvet misslyckas just nu.",
     "zfsNotBuilt": "dkms har inte byggt zfs-modulen för den körande kärnan ({{kernel}}) än - troligen efter en automatisk kärnuppdatering. Kör 'dkms install' för den här kärnan, eller starta om till den kärna modulen senast byggdes för.",
@@ -174,7 +179,10 @@
       "smtpPass": "SMTP-lösenord",
       "testEmailTitle": "Skicka testmejl",
       "testEmailHint": "Skickar ett riktigt mejl direkt med inställningarna ovan - spara dem först så testet speglar det som faktiskt är sparat.",
-      "sendTestEmail": "Skicka testmejl"
+      "sendTestEmail": "Skicka testmejl",
+      "ransomwareTitle": "Ransomware-detektering",
+      "ransomwareHint": "Vid varje pull jämförs den nya snapshoten mot föregående via \"zfs diff\". Når antalet ändrade/tillagda/borttagna filer detta tröskelvärde larmas det direkt (samma kanaler som ovan, plus en egen banner i dashboarden). 0 stänger av kontrollen.",
+      "ransomwareThreshold": "Tröskelvärde (antal ändrade filer)"
     },
     "audit": {
       "title": "Revisionslogg",

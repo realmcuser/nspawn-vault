@@ -9,7 +9,7 @@ THRESHOLD_MIN = 180
 
 STATE_DIR = Path("/var/lib/nspawn-vault/state")
 
-Status = Literal["ok", "stale", "failed", "unknown"]
+Status = Literal["ok", "stale", "failed", "unknown", "ransomware"]
 
 
 def state_file_for(dataset: str) -> Path:
@@ -42,6 +42,11 @@ def age_minutes(state: dict) -> Optional[float]:
 def compute_status(state: Optional[dict]) -> Status:
     if state is None:
         return "unknown"
+    if state.get("ransomware_suspected"):
+        # Checked before result/age - pull.sh only ever sets this on an
+        # otherwise-successful pull, but a suspected ransomware event must
+        # outrank a plain "ok" regardless.
+        return "ransomware"
     result = state.get("result", "missing")
     if result != "success":
         return "failed"
@@ -53,4 +58,16 @@ def compute_status(state: Optional[dict]) -> Status:
 
 def is_alerting(status: Status) -> bool:
     """Matches check-stale.sh's errors += 1 condition exactly."""
-    return status in ("stale", "failed")
+    return status in ("stale", "failed", "ransomware")
+
+
+def changed_entries(state: Optional[dict]) -> int:
+    """Entries changed since the previous snapshot per pull.sh's zfs-diff
+    heuristic - 0 if unset (older state file, or first-ever pull with
+    nothing to diff against)."""
+    if not state:
+        return 0
+    try:
+        return int(state.get("changed_entries", 0))
+    except (TypeError, ValueError):
+        return 0

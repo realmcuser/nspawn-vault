@@ -109,6 +109,28 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-check.timer nspawn-vault-prune.timer
 
 %changelog
+* Thu Jul 16 2026 Developer <dev@example.com> - 0.1.0-10
+- Adds a ransomware-detection heuristic to pull.sh: after every successful
+  snapshot, diffs it against the previous one via `zfs diff` (cheap - reads
+  ZFS's own change metadata, not a filesystem walk) and writes the changed-
+  entry count plus a "ransomware_suspected" boolean into the container's
+  state JSON when it reaches RANSOMWARE_DIFF_THRESHOLD (new key in
+  notify.conf, default 500, 0 disables the check). First-ever pull for a
+  container is skipped (nothing to diff against yet).
+- check-stale.sh now also reads these two fields per container on its
+  existing 30-minute pass and fires an immediate alert (same Pushover/
+  Slack/email channels as the stale/failed checks) whenever
+  ransomware_suspected is set - independent of and in addition to the
+  existing success/staleness check, since a pull can succeed normally while
+  its content is suspect. See nspawn-vault-web 0.1.0-27 for the matching
+  dashboard banner/status - a suspected event is visible in the UI as soon
+  as the pull finishes, but Pushover/Slack/email only re-fire on
+  check-stale.sh's next 30-minute pass, by design (keeps the alert
+  dispatch logic in one place rather than duplicated into pull.sh). One
+  global threshold rather than a per-container one, deliberately, for
+  simplicity - container sizes/churn vary, so a fleet-wide default may need
+  tuning via the new Admin field if false positives show up in practice.
+
 * Fri Jul 10 2026 Developer <dev@example.com> - 0.1.0-9
 - Adds email as a third dead-man's-switch alert channel alongside
   Pushover/Slack, via a shared SMTP relay config (new SMTP_* keys in

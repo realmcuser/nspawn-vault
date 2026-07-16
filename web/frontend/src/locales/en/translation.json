@@ -54,7 +54,8 @@
     "compressionNone": "Uncompressed (.tar)",
     "browseTitle": "Browse: {{container}}",
     "emptyDirectory": "Empty directory.",
-    "loadMore": "Showing {{shown}} of {{total}} - load more"
+    "loadMore": "Showing {{shown}} of {{total}} - load more",
+    "ransomwareHint": "Suspected ransomware: {{count}} changed files since the previous snapshot."
   },
   "alert": {
     "staleTitle": "Backup(s) not confirmed healthy",
@@ -64,6 +65,10 @@
     "pullRunningBody": "{{count}} pull backup(s) in progress right now.",
     "pullRunningBody_one": "1 pull backup in progress right now.",
     "pullRunningBody_other": "{{count}} pull backups in progress right now.",
+    "ransomwareTitle": "Suspected ransomware",
+    "ransomwareBody": "{{count}} source host(s) have a container with an unusually large number of changed files since its previous snapshot. Click a host below to investigate - GFS snapshots are still there to restore from.",
+    "ransomwareBody_one": "1 source host has a container with an unusually large number of changed files since its previous snapshot. Click below to investigate - GFS snapshots are still there to restore from.",
+    "ransomwareBody_other": "{{count}} source hosts have a container with an unusually large number of changed files since its previous snapshot. Click a host below to investigate - GFS snapshots are still there to restore from.",
     "zfsTitle": "ZFS kernel module problem",
     "zfsNotLoaded": "The zfs kernel module is not loaded for the running kernel ({{kernel}}). All pulls, prunes, and dataset reads on this vault are failing right now.",
     "zfsNotBuilt": "dkms has not built the zfs module for the running kernel ({{kernel}}) yet - likely after an automatic kernel update. Run 'dkms install' for this kernel, or reboot into the kernel it was last built for.",
@@ -174,7 +179,10 @@
       "smtpPass": "SMTP password",
       "testEmailTitle": "Send test email",
       "testEmailHint": "Sends one real email right now using the settings above - save them first so the test reflects what's actually stored.",
-      "sendTestEmail": "Send test email"
+      "sendTestEmail": "Send test email",
+      "ransomwareTitle": "Ransomware detection",
+      "ransomwareHint": "Every pull compares the new snapshot against the previous one via \"zfs diff\". If the number of changed/added/removed files reaches this threshold, it alerts immediately (same channels as above, plus its own banner on the dashboard). 0 disables the check.",
+      "ransomwareThreshold": "Threshold (changed files)"
     },
     "audit": {
       "title": "Audit Log",

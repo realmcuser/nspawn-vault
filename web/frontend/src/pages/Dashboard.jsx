@@ -9,6 +9,7 @@ import StaleAlertBanner from '../components/StaleAlertBanner';
 import ZfsAlertBanner from '../components/ZfsAlertBanner';
 import PullRunningBanner from '../components/PullRunningBanner';
 import StorageAlertBanner from '../components/StorageAlertBanner';
+import RansomwareAlertBanner from '../components/RansomwareAlertBanner';
 import Spinner from '../components/Spinner';
 import { formatBytes, formatTimestamp, formatEpoch } from '../utils/format';
 
@@ -20,7 +21,7 @@ const Dashboard = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
   const [hosts, setHosts] = useState(null);
-  const [alerts, setAlerts] = useState({ stale_hosts: [], failed_hosts: [], running_hosts: [], zfs_module_status: null, storage_status: null, has_alert: false });
+  const [alerts, setAlerts] = useState({ stale_hosts: [], failed_hosts: [], running_hosts: [], ransomware_hosts: [], zfs_module_status: null, storage_status: null, has_alert: false });
   const [gfs, setGfs] = useState(null);
   const [notify, setNotify] = useState(null);
   const [storage, setStorage] = useState(null);
@@ -58,6 +59,7 @@ const Dashboard = () => {
       <h1 className="text-2xl font-bold text-white">{t('dashboard.title')}</h1>
       <p className="text-text-muted mt-1 mb-6">{t('dashboard.subtitle')}</p>
 
+      <RansomwareAlertBanner ransomwareHosts={alerts.ransomware_hosts} />
       <ZfsAlertBanner zfsStatus={alerts.zfs_module_status} />
       <StaleAlertBanner staleHosts={alerts.stale_hosts} failedHosts={alerts.failed_hosts} />
       <PullRunningBanner runningHosts={alerts.running_hosts} />

@@ -175,6 +175,11 @@ const HostDetail = () => {
                     {!detail.pull_running && c.status === 'failed' && c.last_pull_msg && (
                       <p className="text-xs text-red-400/80 mt-1">{c.last_pull_msg}</p>
                     )}
+                    {!detail.pull_running && c.ransomware_suspected && (
+                      <p className="text-xs text-red-400/80 mt-1">
+                        {t('host.ransomwareHint', { count: c.changed_entries })}
+                      </p>
+                    )}
                   </td>
                   <td className="px-4 py-3 font-mono text-text-muted text-xs">{c.last_snapshot || '—'}</td>
                   <td className="px-4 py-3 font-mono text-xs">

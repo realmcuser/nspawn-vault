@@ -36,6 +36,7 @@ class NotifySettingsMasked(BaseModel):
     smtp_from: str = ""
     smtp_user: str = ""
     smtp_pass: str = ""
+    ransomware_diff_threshold: str = "500"
 
 
 class TestEmailRequest(BaseModel):
@@ -63,7 +64,7 @@ class HostConnectionTest(BaseModel):
     host: str
 
 
-_STATUS_RANK = {"failed": 3, "stale": 2, "unknown": 1, "ok": 0}
+_STATUS_RANK = {"ransomware": 4, "failed": 3, "stale": 2, "unknown": 1, "ok": 0}
 
 
 def _dataset_for(host: str, container: str) -> str:
@@ -139,6 +140,8 @@ async def get_host_detail(host: str, current_user=Depends(get_current_user)):
             "age_minutes": vault_state.age_minutes(state) if state else None,
             "db_backed_up": vault_zfs.has_db_dump(dataset),
             "retention": vault_zfs.snapshot_retention(dataset, gfs_conf),
+            "changed_entries": vault_state.changed_entries(state),
+            "ransomware_suspected": bool(state.get("ransomware_suspected")) if state else False,
         })
 
     return {
@@ -355,7 +358,10 @@ async def get_notify_settings_admin(current_user=Depends(get_current_admin)):
 
 @router.put("/api/admin/settings/notify")
 async def update_notify_settings(data: NotifySettingsMasked, current_user=Depends(get_current_admin)):
-    vault_config.write_notify_conf(data.model_dump())
+    try:
+        vault_config.write_notify_conf(data.model_dump())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return vault_config.read_notify_conf_masked()
 
 
@@ -530,6 +536,7 @@ async def get_alerts_summary(current_user=Depends(get_current_user)):
     stale_hosts = []
     failed_hosts = []
     running_hosts = []
+    ransomware_hosts = []
     for host in vault_config.list_configured_hosts():
         if vault_systemd.is_pull_running(host):
             # A fresh pull is already in progress for this host right now -
@@ -544,7 +551,9 @@ async def get_alerts_summary(current_user=Depends(get_current_user)):
             dataset = _dataset_for(host, container)
             statuses.append(vault_state.compute_status(vault_state.read_state(dataset)))
         worst = _worst_status(statuses)
-        if worst == "failed":
+        if worst == "ransomware":
+            ransomware_hosts.append(host)
+        elif worst == "failed":
             failed_hosts.append(host)
         elif worst == "stale":
             stale_hosts.append(host)
@@ -555,7 +564,8 @@ async def get_alerts_summary(current_user=Depends(get_current_user)):
         "stale_hosts": stale_hosts,
         "failed_hosts": failed_hosts,
         "running_hosts": running_hosts,
+        "ransomware_hosts": ransomware_hosts,
         "zfs_module_status": zfs_status,
         "storage_status": storage_status,
-        "has_alert": bool(stale_hosts or failed_hosts or not zfs_status["ok"] or not storage_ok),
+        "has_alert": bool(stale_hosts or failed_hosts or ransomware_hosts or not zfs_status["ok"] or not storage_ok),
     }

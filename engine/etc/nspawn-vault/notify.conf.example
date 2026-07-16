@@ -15,3 +15,13 @@ SMTP_TLS_MODE=starttls
 SMTP_USER=
 SMTP_PASS=
 SMTP_FROM=nspawn-vault@example.com
+
+# Ransomware-heuristik (valfri): pull.sh jämför varje ny snapshot mot
+# föregående via "zfs diff" och räknar antalet ändrade/tillagda/borttagna
+# filer. Om antalet når detta tröskelvärde flaggas containern som
+# "ransomware_suspected" i sin state-JSON, och check-stale.sh larmar direkt
+# (samma kanaler som ovan) oavsett om själva pullen i övrigt lyckades.
+# Sätt till 0 för att stänga av kontrollen helt. Ingen global "rätt" siffra
+# finns - stora/dynamiska containrar (t.ex. mycket loggskrivning) kan behöva
+# ett högre värde för att undvika falsklarm.
+RANSOMWARE_DIFF_THRESHOLD=500

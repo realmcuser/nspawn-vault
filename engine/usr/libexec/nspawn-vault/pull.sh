@@ -67,5 +67,30 @@ SNAP="${DATASET}@$(date +%Y%m%d-%H%M%S)"
 zfs snapshot "$SNAP" || fail "zfs snapshot failed"
 echo "Snapshot: $SNAP" >&2
 
-printf '{"result":"success","ts":"%s","snap":"%s"}\n' "$(date -Iseconds)" "$SNAP" > "$STATE"
+# 4) Ransomware-heuristik: räkna ändrade/tillagda/borttagna filer sedan
+#    föregående snapshot via "zfs diff" - läser bara ZFS:s egna
+#    ändringsmetadata (ingen filsystemsgenomgång), så det är billigt även
+#    för stora containrar. check-stale.sh larmar direkt om CHANGED når
+#    tröskeln (RANSOMWARE_DIFF_THRESHOLD i notify.conf, 0 = av).
+NOTIFY_CONF=/etc/nspawn-vault/notify.conf
+[ -f "$NOTIFY_CONF" ] && source "$NOTIFY_CONF"
+THRESHOLD="${RANSOMWARE_DIFF_THRESHOLD:-500}"
+case "$THRESHOLD" in ''|*[!0-9]*) THRESHOLD=500 ;; esac
+
+CHANGED=0
+SUSPECTED=false
+if [ "$THRESHOLD" -gt 0 ]; then
+    SNAP_COUNT=$(zfs list -H -o name -t snapshot "$DATASET" 2>/dev/null | wc -l)
+    if [ "$SNAP_COUNT" -ge 2 ]; then
+        PREV_SNAP=$(zfs list -H -o name -t snapshot -s creation "$DATASET" 2>/dev/null | tail -2 | head -1)
+        CHANGED=$(zfs diff -H "$PREV_SNAP" "$SNAP" 2>/dev/null | wc -l) || CHANGED=0
+        if [ "$CHANGED" -ge "$THRESHOLD" ]; then
+            SUSPECTED=true
+            echo "VARNING: $CHANGED ändrade poster sedan föregående snapshot (tröskel: $THRESHOLD) - möjlig ransomware, se dashboarden" >&2
+        fi
+    fi
+fi
+
+printf '{"result":"success","ts":"%s","snap":"%s","changed_entries":%s,"ransomware_suspected":%s}\n' \
+    "$(date -Iseconds)" "$SNAP" "$CHANGED" "$SUSPECTED" > "$STATE"
 echo "=== Done ===" >&2

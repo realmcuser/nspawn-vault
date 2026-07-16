@@ -72,9 +72,13 @@ for host_dir in "$ETC_DIR"/*/; do
         if [ -f "$f" ]; then
             result=$(python3 -c "import json,sys; d=json.load(open('$f')); print(d.get('result','missing'))" 2>/dev/null || echo missing)
             ts=$(python3 -c "import json,sys,datetime; d=json.load(open('$f')); print(int(datetime.datetime.fromisoformat(d['ts']).timestamp()))" 2>/dev/null || echo 0)
+            ransomware=$(python3 -c "import json; d=json.load(open('$f')); print('1' if d.get('ransomware_suspected') else '0')" 2>/dev/null || echo 0)
+            changed=$(python3 -c "import json; d=json.load(open('$f')); print(d.get('changed_entries', 0))" 2>/dev/null || echo 0)
         else
             result=missing
             ts=0
+            ransomware=0
+            changed=0
         fi
         age=$(( (now - ts) / 60 ))
 
@@ -85,6 +89,17 @@ for host_dir in "$ETC_DIR"/*/; do
             errors=$((errors+1))
         else
             echo "OK: ${label} (${age}min sedan)" >&2
+        fi
+
+        # Ransomware-heuristik satt av pull.sh (zfs diff mot föregående
+        # snapshot) - oberoende av success/stale-kollen ovan, eftersom en
+        # pull kan lyckas helt normalt samtidigt som innehållet är
+        # misstänkt krypterat.
+        if [ "$ransomware" = "1" ]; then
+            reason="misstänkt ransomware: ${changed} ändrade filer sedan föregående snapshot"
+            send_alert "${label}: ${reason}"
+            host_problems="${host_problems}- ${name}: ${reason}\n"
+            errors=$((errors+1))
         fi
     done < "${host_dir}containers"
 

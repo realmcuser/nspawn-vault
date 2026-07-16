@@ -196,10 +196,15 @@ def _shell_quote(value: str) -> str:
 
 def read_notify_conf() -> dict:
     values = _parse_shell_kv(NSPAWN_VAULT_ETC / "notify.conf")
+    try:
+        ransomware_threshold = int(values.get("RANSOMWARE_DIFF_THRESHOLD", 500))
+    except ValueError:
+        ransomware_threshold = 500
     return {
         "pushover_configured": bool(values.get("PUSHOVER_TOKEN")) and bool(values.get("PUSHOVER_USER")),
         "slack_configured": bool(values.get("SLACK_URL")),
         "smtp_configured": bool(values.get("SMTP_HOST")),
+        "ransomware_diff_threshold": ransomware_threshold,
     }
 
 
@@ -220,6 +225,7 @@ def read_notify_conf_masked() -> dict:
         "smtp_from": values.get("SMTP_FROM", ""),
         "smtp_user": SECRET_SENTINEL if values.get("SMTP_USER") else "",
         "smtp_pass": SECRET_SENTINEL if values.get("SMTP_PASS") else "",
+        "ransomware_diff_threshold": values.get("RANSOMWARE_DIFF_THRESHOLD", "500"),
     }
 
 
@@ -240,6 +246,10 @@ def write_notify_conf(values: dict) -> None:
     smtp_user = resolve(values.get("smtp_user"), "SMTP_USER")
     smtp_pass = resolve(values.get("smtp_pass"), "SMTP_PASS")
 
+    ransomware_threshold = str(values.get("ransomware_diff_threshold") or "500").strip()
+    if not ransomware_threshold.isdigit():
+        raise ValueError(f"invalid ransomware diff threshold: {ransomware_threshold!r}")
+
     lines = [
         "# Pushover for the dead-man's-switch alert - managed via nspawn-vault-web Admin",
         f"PUSHOVER_TOKEN={_shell_quote(token)}",
@@ -256,6 +266,8 @@ def write_notify_conf(values: dict) -> None:
         f"SMTP_FROM={_shell_quote(values.get('smtp_from') or '')}",
         f"SMTP_USER={_shell_quote(smtp_user)}",
         f"SMTP_PASS={_shell_quote(smtp_pass)}",
+        "# Ransomware-heuristik (0 = av) - se notify.conf.example för detaljer",
+        f"RANSOMWARE_DIFF_THRESHOLD={_shell_quote(ransomware_threshold)}",
         "",
     ]
     path = NSPAWN_VAULT_ETC / "notify.conf"

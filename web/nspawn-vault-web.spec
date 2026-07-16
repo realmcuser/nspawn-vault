@@ -120,6 +120,28 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-web.service
 
 %changelog
+* Thu Jul 16 2026 Developer <dev@example.com> - 0.1.0-27
+- Threads through a new "ransomware_suspected" status the engine can now set
+  on a container (see nspawn-vault 0.1.0-10's zfs-diff heuristic in pull.sh):
+  vault_state.compute_status() returns a new "ransomware" status ranked
+  above "failed" (both in vault_state and vault_routes._STATUS_RANK), and
+  GET /api/hosts/{host} and /api/alerts/summary (new "ransomware_hosts" key,
+  folded into has_alert) surface it.
+- New Dashboard banner (RansomwareAlertBanner.jsx, same deliberately-loud
+  styling as StaleAlertBanner/ZfsAlertBanner) rides the existing 30s
+  /api/alerts/summary poll already in Dashboard.jsx - no new polling
+  infrastructure needed for it to update on its own for anyone already
+  sitting on the dashboard. HostDetail shows the changed-file count inline
+  under the container's status badge; StatusBadge gets a distinct
+  "ransomware" variant.
+- New Admin > Notifications field, RANSOMWARE_DIFF_THRESHOLD (also readable/
+  writable via GET/PUT /api/admin/settings/notify, plaintext like
+  smtp_port - not a secret), validated server-side as digits-only before
+  being written through the existing _shell_quote() path (gotcha #1 -
+  check-stale.sh sources notify.conf as root). Re-verified live with a
+  $()-style injection payload in this new field - rejected with a 400, not
+  written to disk.
+
 * Sat Jul 11 2026 Developer <dev@example.com> - 0.1.0-26
 - write_containers/write_host_emails/write_gfs_conf/write_notify_conf now
   write via a temp file + os.replace() instead of Path.write_text()
