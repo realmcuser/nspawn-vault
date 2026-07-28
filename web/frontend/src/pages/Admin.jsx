@@ -551,8 +551,7 @@ const Admin = () => {
             <thead className="bg-surface-hover text-text-muted border-b border-border">
               <tr>
                 <th className="px-4 py-3 font-medium">{t('admin.hosts.colHost')}</th>
-                <th className="px-4 py-3 font-medium">{t('admin.hosts.colContainers')}</th>
-                <th className="px-4 py-3 font-medium">{t('admin.hosts.colEmails')}</th>
+                <th className="px-4 py-3 font-medium">{t('admin.hosts.colContainersEmails')}</th>
                 <th className="px-4 py-3 font-medium">{t('admin.hosts.colTimer')}</th>
                 <th className="px-4 py-3 font-medium text-right">{t('admin.actions')}</th>
               </tr>
@@ -576,7 +575,7 @@ const Admin = () => {
                       </p>
                     )}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 space-y-3">
                     {editingHost === h.host ? (
                       <div className="space-y-2">
                         <textarea
@@ -621,8 +620,7 @@ const Admin = () => {
                         </button>
                       </div>
                     )}
-                  </td>
-                  <td className="px-4 py-3">
+                    <div className="border-t border-border pt-3">
                     {editingEmailsHost === h.host ? (
                       <div className="space-y-2 min-w-[20rem]">
                         <textarea
@@ -710,6 +708,7 @@ const Admin = () => {
                         )}
                       </div>
                     )}
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     <button
@@ -733,7 +732,7 @@ const Admin = () => {
               ))}
               {hosts.length === 0 && (
                 <tr>
-                  <td colSpan="5" className="px-4 py-8 text-center text-text-muted">{t('admin.hosts.noHosts')}</td>
+                  <td colSpan="4" className="px-4 py-8 text-center text-text-muted">{t('admin.hosts.noHosts')}</td>
                 </tr>
               )}
             </tbody>

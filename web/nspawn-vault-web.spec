@@ -120,6 +120,17 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-web.service
 
 %changelog
+* Tue Jul 28 2026 Developer <dev@example.com> - 0.1.0-32
+- Merges the Source Hosts table's separate "Containers" and "Email
+  alerts" columns into one "Containers & email alerts" column, with
+  Containers stacked above Emails (divider between them) instead of
+  side by side. Found live: with 5 columns sharing the table's width,
+  the notify-settings panel's own edit-mode width squeezed the
+  neighboring Containers column uncomfortably narrow whenever the panel
+  was open. Stacking them in one column instead of splitting the row
+  horizontally gives whichever section is being edited the full column
+  width to itself.
+
 * Tue Jul 28 2026 Developer <dev@example.com> - 0.1.0-31
 - Fixes two real usability issues in 0.1.0-30's notify-settings panel,
   found live by Johan testing it minutes after it shipped: the two new
