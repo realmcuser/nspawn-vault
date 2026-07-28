@@ -120,6 +120,23 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-web.service
 
 %changelog
+* Tue Jul 28 2026 Developer <dev@example.com> - 0.1.0-31
+- Fixes two real usability issues in 0.1.0-30's notify-settings panel,
+  found live by Johan testing it minutes after it shipped: the two new
+  contact inputs (admin-contact name/email-phone) were placed side by
+  side in a 2-column grid inside an already-narrow table cell, so their
+  placeholder text ("Admin-kontaktens namn" / "...e-post/telefon")
+  visually clipped down to just "Admin-kontaktens" in both boxes -
+  impossible to tell them apart. Stacked them vertically instead and
+  gave each an explicit label above the input (matching the language
+  selector's existing label pattern) instead of relying on placeholder
+  text alone.
+- The Swedish locale mixed the bare English word "User" into otherwise-
+  Swedish sentences ("Språk för User-mejl") despite the category hint
+  right above it already saying "kundmottagare" - standardized on "kund"
+  throughout the Swedish strings for this feature, matching the hint's
+  own wording. English strings unchanged ("User" is native there).
+
 * Tue Jul 28 2026 Developer <dev@example.com> - 0.1.0-30
 - Admin > Source Hosts' email-recipients editor gains: a category
   (admin/user) per address, entered inline via a ":user" suffix on the

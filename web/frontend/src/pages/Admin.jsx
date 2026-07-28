@@ -624,7 +624,7 @@ const Admin = () => {
                   </td>
                   <td className="px-4 py-3">
                     {editingEmailsHost === h.host ? (
-                      <div className="space-y-2 min-w-[16rem]">
+                      <div className="space-y-2 min-w-[20rem]">
                         <textarea
                           value={editingEmailsText}
                           onChange={(e) => setEditingEmailsText(e.target.value)}
@@ -633,7 +633,8 @@ const Admin = () => {
                           placeholder={t('admin.hosts.oneEmailPerLine')}
                         />
                         <p className="text-xs text-text-muted">{t('admin.hosts.emailCategoryHint')}</p>
-                        <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-xs text-text-muted mb-1">{t('admin.hosts.contactNameLabel')}</label>
                           <input
                             type="text"
                             value={editingContactName}
@@ -641,6 +642,9 @@ const Admin = () => {
                             placeholder={t('admin.hosts.contactNamePlaceholder')}
                             className="w-full bg-background border border-border rounded px-2 py-1 text-text text-xs focus:outline-none focus:border-primary"
                           />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-text-muted mb-1">{t('admin.hosts.contactInfoLabel')}</label>
                           <input
                             type="text"
                             value={editingContactInfo}
