@@ -109,6 +109,20 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-check.timer nspawn-vault-prune.timer
 
 %changelog
+* Tue Jul 28 2026 Developer <dev@example.com> - 0.1.0-14
+- Fixes read_host_language() (added in 0.1.0-13): it redirected `tr`'s
+  stdin from `<host>/notify-language` without checking the file exists
+  first, so every host WITHOUT that new opt-in file (i.e. almost every
+  host, since it's brand new) logged a "No such file or directory" error
+  on every single check-stale.sh run instead of silently defaulting to
+  "sv" the way it was supposed to. Caught live on the production vault
+  immediately after deploying 0.1.0-13 - real end-to-end email-dispatch
+  testing on a live host with the new feature configured, not just a
+  syntax check, is what surfaced it (fhdcore-jf.vpn.fhd.se, which has no
+  notify-language file, tripped it on the very first run). Guarded with
+  the same `[ -f "$f" ] || ...` pattern read_admin_contact() already used
+  correctly.
+
 * Tue Jul 28 2026 Developer <dev@example.com> - 0.1.0-13
 - check-stale.sh's per-host email alert now splits <host>/notify-email
   recipients into two categories: "admin" (bare address, or explicit

@@ -78,7 +78,11 @@ read_admin_contact() {
 # one line, "sv" or "en". Missing/invalid -> "sv".
 read_host_language() {
     local f="$ETC_DIR/$1/notify-language" lang
-    lang=$(tr -d '[:space:]' < "$f" 2>/dev/null)
+    if [ ! -f "$f" ]; then
+        echo sv
+        return 0
+    fi
+    lang=$(tr -d '[:space:]' < "$f")
     case "$lang" in
         en) echo en ;;
         *) echo sv ;;
