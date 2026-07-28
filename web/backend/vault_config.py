@@ -86,31 +86,106 @@ def read_containers(host: str) -> list[str]:
     return names
 
 
-def read_host_emails(host: str) -> list[str]:
+def read_host_emails(host: str) -> list[dict]:
     """Per-host email alert recipients (separate from the global
     Pushover/Slack config in notify.conf) - one address per line in
-    <host>/notify-email, mirrors read_containers()'s own format/filtering."""
+    <host>/notify-email, mirrors read_containers()'s own format/filtering.
+    Each line is `address` or `address:category` (admin/user, case
+    insensitive) - a bare address is category "admin", so every
+    pre-existing notify-email file (written before categories existed)
+    keeps behaving exactly as before. check-stale.sh's send_host_email()
+    parses this same format independently in bash - keep both in sync."""
     path = NSPAWN_VAULT_ETC / host / "notify-email"
     if not path.is_file():
         return []
-    addrs = []
+    entries = []
     for line in path.read_text().splitlines():
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
             continue
-        addrs.append(stripped)
-    return addrs
+        addr, _, category = stripped.partition(":")
+        category = category.strip().lower() or "admin"
+        if category not in ("admin", "user"):
+            category = "admin"
+        entries.append({"email": addr, "category": category})
+    return entries
 
 
-def write_host_emails(host: str, addresses: list[str]) -> None:
+def write_host_emails(host: str, entries: list[dict]) -> None:
+    """`entries` is [{"email": ..., "category": "admin"|"user"}, ...] -
+    validated by the caller (Pydantic schema) for shape, but email syntax
+    and category value are re-validated here regardless. Admin-category
+    addresses are written bare (no ":admin" suffix) so an all-admin host's
+    file looks identical to before categories existed."""
     validate_hostname(host)
-    for addr in addresses:
-        validate_email(addr)
+    for entry in entries:
+        validate_email(entry["email"])
+        if entry["category"] not in ("admin", "user"):
+            raise ValueError(f"invalid recipient category: {entry['category']!r}")
     path = NSPAWN_VAULT_ETC / host / "notify-email"
     if not path.parent.is_dir():
         raise ValueError(f"host not found: {host}")
-    text = "".join(f"{a}\n" for a in addresses)
-    _atomic_write_text(path, text)
+    lines = []
+    for entry in entries:
+        if entry["category"] == "user":
+            lines.append(f"{entry['email']}:user\n")
+        else:
+            lines.append(f"{entry['email']}\n")
+    _atomic_write_text(path, "".join(lines))
+
+
+def read_host_admin_contact(host: str) -> dict | None:
+    """Who a "user"-category recipient should contact for help - a free-text
+    name + email/phone shown in the friendlier customer-facing email
+    (check-stale.sh's read_admin_contact()), independent of who's actually
+    on the notify-email list. <host>/admin-contact: line 1 = name, line 2 =
+    contact info. Missing file -> None (customer email just omits the
+    contact line)."""
+    path = NSPAWN_VAULT_ETC / host / "admin-contact"
+    if not path.is_file():
+        return None
+    lines = path.read_text().splitlines()
+    name = lines[0].strip() if len(lines) >= 1 else ""
+    contact = lines[1].strip() if len(lines) >= 2 else ""
+    if not name and not contact:
+        return None
+    return {"name": name, "contact": contact}
+
+
+def write_host_admin_contact(host: str, name: str, contact: str) -> None:
+    """Newlines are stripped from name/contact - the on-disk format is a
+    fixed two-line file, an embedded newline would corrupt it."""
+    validate_hostname(host)
+    path = NSPAWN_VAULT_ETC / host / "admin-contact"
+    if not path.parent.is_dir():
+        raise ValueError(f"host not found: {host}")
+    name = " ".join(name.split())
+    contact = " ".join(contact.split())
+    if not name and not contact:
+        path.unlink(missing_ok=True)
+        return
+    _atomic_write_text(path, f"{name}\n{contact}\n")
+
+
+def read_host_language(host: str) -> str:
+    """Language of the "user"-category customer-facing email
+    (check-stale.sh's read_host_language()). <host>/notify-language: one
+    line, "sv" or "en". Missing/invalid -> "sv"."""
+    path = NSPAWN_VAULT_ETC / host / "notify-language"
+    if not path.is_file():
+        return "sv"
+    value = path.read_text().strip().lower()
+    return value if value in ("sv", "en") else "sv"
+
+
+def write_host_language(host: str, language: str) -> None:
+    validate_hostname(host)
+    if language not in ("sv", "en"):
+        raise ValueError(f"invalid language: {language!r}")
+    path = NSPAWN_VAULT_ETC / host / "notify-language"
+    if not path.parent.is_dir():
+        raise ValueError(f"host not found: {host}")
+    _atomic_write_text(path, f"{language}\n")
 
 
 def list_configured_hosts() -> list[str]:

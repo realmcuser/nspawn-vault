@@ -32,19 +32,57 @@ send_alert() {
 # One batched email per source host (not per container) - with ~200 hosts x
 # 2+ containers each, per-container emails would flood the two recipients
 # configured for a host. Recipients live in <host>/notify-email, one address
-# per line - separate from the global Pushover/Slack config since different
-# people care about different source hosts.
+# per line, optionally suffixed ":admin"/":user" (bare address = admin,
+# backward-compatible with every existing file) - separate from the global
+# Pushover/Slack config since different people care about different source
+# hosts, and Admin/User recipients get a differently-worded email (see the
+# dual send_host_email calls at the end of the host loop below).
 send_host_email() {
-    local host="$1" body="$2"
+    local host="$1" body="$2" subject="$3" category="$4"
     local email_file="$ETC_DIR/$host/notify-email"
     [ -f "$email_file" ] || return 0
-    local to
-    to=$(paste -sd, "$email_file" 2>/dev/null)
+    local to="" line addr cat
+    while IFS= read -r line || [ -n "$line" ]; do
+        [[ "$line" =~ ^#|^$ ]] && continue
+        addr="${line%%:*}"
+        if [[ "$line" == *:* ]]; then
+            cat=$(echo "${line#*:}" | tr '[:upper:]' '[:lower:]')
+        else
+            cat="admin"
+        fi
+        [ "$cat" = "$category" ] && to="${to:+$to,}$addr"
+    done < "$email_file"
     [ -n "$to" ] || return 0
     /usr/libexec/nspawn-vault/send-email.sh \
-        "$to" \
-        "nspawn-vault: stale backup(s) on ${host}" \
-        "$body" >/dev/null 2>&1 || echo "WARNING: email alert to ${host} failed" >&2
+        "$to" "$subject" "$body" \
+        >/dev/null 2>&1 || echo "WARNING: email alert (${category}) to ${host} failed" >&2
+}
+
+# Optional per-host "who to contact for help" shown in the friendlier User
+# email - independent of who's actually on the notify-email list (e.g. a
+# support alias/phone number rather than a personal alert address).
+# admin-contact: line 1 = name, line 2 = contact info. Missing file -> both
+# vars empty, caller just omits the contact line. NEVER interpolate these
+# into a printf FORMAT string, only ever pass as %s ARGUMENTS - they're
+# free text from a config file.
+read_admin_contact() {
+    ADMIN_CONTACT_NAME=""
+    ADMIN_CONTACT_INFO=""
+    local f="$ETC_DIR/$1/admin-contact"
+    [ -f "$f" ] || return 0
+    ADMIN_CONTACT_NAME=$(sed -n '1p' "$f")
+    ADMIN_CONTACT_INFO=$(sed -n '2p' "$f")
+}
+
+# Optional per-host language for the User email template. notify-language:
+# one line, "sv" or "en". Missing/invalid -> "sv".
+read_host_language() {
+    local f="$ETC_DIR/$1/notify-language" lang
+    lang=$(tr -d '[:space:]' < "$f" 2>/dev/null)
+    case "$lang" in
+        en) echo en ;;
+        *) echo sv ;;
+    esac
 }
 
 # Repeat-alert backoff: without this, an ongoing incident (e.g. a source
@@ -95,6 +133,8 @@ for host_dir in "$ETC_DIR"/*/; do
     hosts_found=$((hosts_found+1))
     host_short="${host%%.*}"
     host_problems=""
+    host_problems_user=""
+    lang=$(read_host_language "$host")
 
     while IFS= read -r name || [ -n "$name" ]; do
         [[ "$name" =~ ^#|^$ ]] && continue
@@ -122,6 +162,11 @@ for host_dir in "$ETC_DIR"/*/; do
             if should_notify "$key_stale"; then
                 send_alert "${label}: ${reason}"
                 host_problems="${host_problems}- ${name}: ${reason}\n"
+                if [ "$lang" = en ]; then
+                    host_problems_user="${host_problems_user}- ${name}: the backup could not be confirmed as successful\n"
+                else
+                    host_problems_user="${host_problems_user}- ${name}: backupen kunde inte bekräftas som lyckad\n"
+                fi
                 mark_notified "$key_stale"
             else
                 echo "SUPPRESSED (backoff): ${label}: ${reason}" >&2
@@ -142,6 +187,11 @@ for host_dir in "$ETC_DIR"/*/; do
             if should_notify "$key_ransomware"; then
                 send_alert "${label}: ${reason}"
                 host_problems="${host_problems}- ${name}: ${reason}\n"
+                if [ "$lang" = en ]; then
+                    host_problems_user="${host_problems_user}- ${name}: an unusually large number of changed files was detected\n"
+                else
+                    host_problems_user="${host_problems_user}- ${name}: ett ovanligt stort antal ändrade filer upptäcktes\n"
+                fi
                 mark_notified "$key_ransomware"
             else
                 echo "SUPPRESSED (backoff): ${label}: ${reason}" >&2
@@ -153,7 +203,27 @@ for host_dir in "$ETC_DIR"/*/; do
 
     if [ -n "$host_problems" ]; then
         body=$(printf 'nspawn-vault found a problem with the following container(s) on %s:\n\n%b\nSee the dashboard for details.\n' "$host" "$host_problems")
-        send_host_email "$host" "$body"
+        send_host_email "$host" "$body" "nspawn-vault: stale backup(s) on ${host}" "admin"
+    fi
+
+    if [ -n "$host_problems_user" ]; then
+        read_admin_contact "$host"
+        contact_line=""
+        if [ -n "$ADMIN_CONTACT_NAME" ]; then
+            if [ "$lang" = en ]; then
+                contact_line=$(printf 'Please contact %s (%s) if you have any questions.\n' "$ADMIN_CONTACT_NAME" "$ADMIN_CONTACT_INFO")
+            else
+                contact_line=$(printf 'Kontakta %s (%s) om du har frågor.\n' "$ADMIN_CONTACT_NAME" "$ADMIN_CONTACT_INFO")
+            fi
+        fi
+        if [ "$lang" = en ]; then
+            subject_user="nspawn-vault: backup problem on ${host}"
+            body_user=$(printf 'Hello,\n\nThere was a problem with the backup for the following container(s) on %s:\n\n%b\n%s\nThis is an automated message from nspawn-vault.\n' "$host" "$host_problems_user" "$contact_line")
+        else
+            subject_user="nspawn-vault: problem med backup på ${host}"
+            body_user=$(printf 'Hej,\n\nDet uppstod ett problem med backupen för följande behållare på %s:\n\n%b\n%s\nDetta är ett automatiskt meddelande från nspawn-vault.\n' "$host" "$host_problems_user" "$contact_line")
+        fi
+        send_host_email "$host" "$body_user" "$subject_user" "user"
     fi
 done
 

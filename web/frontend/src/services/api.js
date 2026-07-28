@@ -273,14 +273,15 @@ export async function updateHostContainers(host, containers) {
   return response.json();
 }
 
-export async function updateHostEmails(host, emails) {
-  const response = await fetchWithAuth(`/api/admin/hosts/${encodeURIComponent(host)}/emails`, {
+// settings: { emails: [{email, category}], admin_contact_name, admin_contact_info, language }
+export async function updateHostNotifySettings(host, settings) {
+  const response = await fetchWithAuth(`/api/admin/hosts/${encodeURIComponent(host)}/notify-settings`, {
     method: 'PUT',
-    body: JSON.stringify({ emails }),
+    body: JSON.stringify(settings),
   });
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.detail || 'Failed to save email recipients');
+    throw new Error(error.detail || 'Failed to save notification settings');
   }
   return response.json();
 }

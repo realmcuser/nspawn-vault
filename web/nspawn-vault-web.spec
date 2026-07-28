@@ -120,6 +120,23 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-web.service
 
 %changelog
+* Tue Jul 28 2026 Developer <dev@example.com> - 0.1.0-30
+- Admin > Source Hosts' email-recipients editor gains: a category
+  (admin/user) per address, entered inline via a ":user" suffix on the
+  line (documented in a new hint under the textarea); an "admin contact"
+  name + email/phone shown to "user"-category recipients in their
+  friendlier alert email; and a Swedish/English selector for that same
+  email. Backed by a new combined
+  PUT /api/admin/hosts/{host}/notify-settings (replaces the old
+  PUT .../emails, which only ever carried a bare address list) and
+  matching read/write functions in vault_config.py
+  (read_host_emails/write_host_emails now carry category,
+  read_host_admin_contact/write_host_admin_contact,
+  read_host_language/write_host_language). See nspawn-vault 0.1.0-13 for
+  the check-stale.sh side that actually sends the two different emails.
+- Non-edit-mode email pills are now visually distinguished by category
+  (admin vs. user) so the split is scannable without entering edit mode.
+
 * Tue Jul 28 2026 Developer <dev@example.com> - 0.1.0-29
 - Adds "Acknowledge & resume" to the host detail page: when a container is
   auto-paused by pull.sh (nspawn-vault 0.1.0-12, on ransomware_suspected),

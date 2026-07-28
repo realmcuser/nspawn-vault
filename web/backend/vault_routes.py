@@ -1,5 +1,7 @@
 import os
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel, Field
@@ -49,8 +51,16 @@ class AcknowledgeRansomware(BaseModel):
     note: str = ""
 
 
-class HostEmailsUpdate(BaseModel):
-    emails: list[str]
+class EmailRecipient(BaseModel):
+    email: str
+    category: Literal["admin", "user"] = "admin"
+
+
+class HostNotifySettingsUpdate(BaseModel):
+    emails: list[EmailRecipient]
+    admin_contact_name: str = ""
+    admin_contact_info: str = ""
+    language: Literal["sv", "en"] = "sv"
 
 
 class HostCreate(BaseModel):
@@ -430,6 +440,8 @@ async def list_hosts_admin(current_user=Depends(get_current_admin)):
             "host": host,
             "containers": vault_config.read_containers(host),
             "emails": vault_config.read_host_emails(host),
+            "admin_contact": vault_config.read_host_admin_contact(host),
+            "language": vault_config.read_host_language(host),
             "timer_enabled": vault_systemd.timer_enabled(f"nspawn-vault-pull@{host}.timer"),
         })
     return hosts
@@ -500,19 +512,30 @@ async def update_containers_admin(host: str, data: ContainersUpdate, current_use
     return {"host": host, "containers": data.containers}
 
 
-@router.put("/api/admin/hosts/{host}/emails")
-async def update_host_emails_admin(host: str, data: HostEmailsUpdate, current_user=Depends(get_current_admin)):
+@router.put("/api/admin/hosts/{host}/notify-settings")
+async def update_host_notify_settings_admin(host: str, data: HostNotifySettingsUpdate, current_user=Depends(get_current_admin)):
     """Who gets emailed (in addition to the global Pushover/Slack alerts)
-    when THIS source host's dead-man's-switch fires - check-stale.sh reads
-    this same file directly, not through this app."""
+    when THIS source host's dead-man's-switch fires, split into "admin"
+    (today's technical alert) and "user" (a friendlier message naming the
+    affected container(s) plus who to contact for help) categories, and
+    the per-host admin-contact/language that back that customer-facing
+    email - check-stale.sh reads these same files directly, not through
+    this app."""
     host = unquote(host)
     if host not in vault_config.list_configured_hosts():
         raise HTTPException(status_code=404, detail="Host not found")
     try:
-        vault_config.write_host_emails(host, data.emails)
+        vault_config.write_host_emails(host, [e.model_dump() for e in data.emails])
+        vault_config.write_host_admin_contact(host, data.admin_contact_name, data.admin_contact_info)
+        vault_config.write_host_language(host, data.language)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return {"host": host, "emails": data.emails}
+    return {
+        "host": host,
+        "emails": vault_config.read_host_emails(host),
+        "admin_contact": vault_config.read_host_admin_contact(host),
+        "language": vault_config.read_host_language(host),
+    }
 
 
 @router.put("/api/admin/hosts/{host}/timer")

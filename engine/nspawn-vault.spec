@@ -109,6 +109,26 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-check.timer nspawn-vault-prune.timer
 
 %changelog
+* Tue Jul 28 2026 Developer <dev@example.com> - 0.1.0-13
+- check-stale.sh's per-host email alert now splits <host>/notify-email
+  recipients into two categories: "admin" (bare address, or explicit
+  ":admin" suffix - unchanged, gets exactly today's technical alert) and
+  "user" (":user" suffix - gets a friendlier message naming the affected
+  container(s) instead of raw result/age/threshold values). Fully
+  backward compatible: every existing notify-email file (no suffixes at
+  all) keeps sending the identical admin email it always did.
+- Two new optional per-host files back the "user" email: admin-contact
+  (2 lines: contact name, then contact info) shown as a "contact X for
+  help" line, and notify-language (one line, "sv" or "en", default "sv")
+  selecting which fully-localized template it's sent in. Both are plain
+  reads, never `source`d as shell.
+- send-email.sh itself is unchanged - category/language selection and
+  the two distinct message bodies are entirely a check-stale.sh concern,
+  dispatched as two separate send-email.sh calls per host when both
+  categories have problems to report. See nspawn-vault-web 0.1.0-30 for
+  the matching Admin UI (per-recipient category, admin-contact fields,
+  language selector).
+
 * Tue Jul 28 2026 Developer <dev@example.com> - 0.1.0-12
 - Auto-pauses pull.sh for a container once ransomware_suspected trips,
   instead of just alerting: it now places a `zfs hold` (tag

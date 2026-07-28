@@ -6,7 +6,7 @@ import {
   fetchUsers, updateUser, fetchAdminSettings, updateAdminSettings,
   fetchLdapSettings, updateLdapSettings, testLdapConnection,
   fetchGfsSettings, updateGfsSettings, fetchAdminNotifySettings, updateNotifySettings, sendTestEmail,
-  fetchAdminHosts, createHost, deleteHost, updateHostContainers, updateHostEmails, updateHostTimer,
+  fetchAdminHosts, createHost, deleteHost, updateHostContainers, updateHostNotifySettings, updateHostTimer,
   testHostConnection, fetchVaultPublicKey, fetchAuditLog, triggerPruneNow,
 } from '../services/api';
 
@@ -69,6 +69,9 @@ const Admin = () => {
   const [savingContainers, setSavingContainers] = useState(false);
   const [editingEmailsHost, setEditingEmailsHost] = useState(null);
   const [editingEmailsText, setEditingEmailsText] = useState('');
+  const [editingContactName, setEditingContactName] = useState('');
+  const [editingContactInfo, setEditingContactInfo] = useState('');
+  const [editingLanguage, setEditingLanguage] = useState('sv');
   const [savingEmails, setSavingEmails] = useState(false);
   const [testingHost, setTestingHost] = useState(null);
   const [hostTestResults, setHostTestResults] = useState({});
@@ -253,7 +256,13 @@ const Admin = () => {
     text.split('\n').map((s) => s.trim()).filter(Boolean);
 
   const parseEmailsText = (text) =>
-    text.split('\n').map((s) => s.trim()).filter(Boolean);
+    text.split('\n').map((s) => s.trim()).filter(Boolean).map((line) => {
+      const [email, category] = line.split(':');
+      return { email, category: (category || '').trim().toLowerCase() === 'user' ? 'user' : 'admin' };
+    });
+
+  const emailsToText = (emails) =>
+    (emails || []).map((e) => (e.category === 'user' ? `${e.email}:user` : e.email)).join('\n');
 
   const handleAddHost = async () => {
     const host = newHostName.trim();
@@ -305,16 +314,25 @@ const Admin = () => {
 
   const handleStartEditEmails = (h) => {
     setEditingEmailsHost(h.host);
-    setEditingEmailsText((h.emails || []).join('\n'));
+    setEditingEmailsText(emailsToText(h.emails));
+    setEditingContactName(h.admin_contact?.name || '');
+    setEditingContactInfo(h.admin_contact?.contact || '');
+    setEditingLanguage(h.language || 'sv');
   };
 
   const handleSaveEmails = async (host) => {
     setSavingEmails(true);
     setHostsError(null);
     try {
-      const emails = parseEmailsText(editingEmailsText);
-      const updated = await updateHostEmails(host, emails);
-      setHosts(hosts.map((h) => (h.host === host ? { ...h, emails: updated.emails } : h)));
+      const updated = await updateHostNotifySettings(host, {
+        emails: parseEmailsText(editingEmailsText),
+        admin_contact_name: editingContactName,
+        admin_contact_info: editingContactInfo,
+        language: editingLanguage,
+      });
+      setHosts(hosts.map((h) => (h.host === host
+        ? { ...h, emails: updated.emails, admin_contact: updated.admin_contact, language: updated.language }
+        : h)));
       setEditingEmailsHost(null);
     } catch (err) {
       setHostsError(err.message);
@@ -606,7 +624,7 @@ const Admin = () => {
                   </td>
                   <td className="px-4 py-3">
                     {editingEmailsHost === h.host ? (
-                      <div className="space-y-2">
+                      <div className="space-y-2 min-w-[16rem]">
                         <textarea
                           value={editingEmailsText}
                           onChange={(e) => setEditingEmailsText(e.target.value)}
@@ -614,6 +632,34 @@ const Admin = () => {
                           className="w-full bg-background border border-border rounded px-2 py-1 text-text text-sm font-mono focus:outline-none focus:border-primary"
                           placeholder={t('admin.hosts.oneEmailPerLine')}
                         />
+                        <p className="text-xs text-text-muted">{t('admin.hosts.emailCategoryHint')}</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            type="text"
+                            value={editingContactName}
+                            onChange={(e) => setEditingContactName(e.target.value)}
+                            placeholder={t('admin.hosts.contactNamePlaceholder')}
+                            className="w-full bg-background border border-border rounded px-2 py-1 text-text text-xs focus:outline-none focus:border-primary"
+                          />
+                          <input
+                            type="text"
+                            value={editingContactInfo}
+                            onChange={(e) => setEditingContactInfo(e.target.value)}
+                            placeholder={t('admin.hosts.contactInfoPlaceholder')}
+                            className="w-full bg-background border border-border rounded px-2 py-1 text-text text-xs focus:outline-none focus:border-primary"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-text-muted mb-1">{t('admin.hosts.userEmailLanguage')}</label>
+                          <select
+                            value={editingLanguage}
+                            onChange={(e) => setEditingLanguage(e.target.value)}
+                            className="w-full bg-background border border-border rounded px-2 py-1 text-text text-xs focus:outline-none focus:border-primary"
+                          >
+                            <option value="sv">Svenska</option>
+                            <option value="en">English</option>
+                          </select>
+                        </div>
                         <div className="flex gap-2">
                           <button
                             onClick={() => handleSaveEmails(h.host)}
@@ -637,7 +683,13 @@ const Admin = () => {
                           <span className="text-text-muted italic">{t('admin.hosts.noEmails')}</span>
                         ) : (
                           h.emails.map((e) => (
-                            <span key={e} className="px-2 py-0.5 rounded bg-surface-hover text-text text-xs font-mono">{e}</span>
+                            <span
+                              key={e.email}
+                              title={e.category === 'user' ? t('admin.hosts.categoryUser') : t('admin.hosts.categoryAdmin')}
+                              className={`px-2 py-0.5 rounded text-xs font-mono ${e.category === 'user' ? 'bg-primary/10 text-primary' : 'bg-surface-hover text-text'}`}
+                            >
+                              {e.email}
+                            </span>
                           ))
                         )}
                         <button
@@ -647,6 +699,11 @@ const Admin = () => {
                         >
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
+                        {h.admin_contact?.name && (
+                          <span className="w-full text-xs text-text-muted">
+                            {t('admin.hosts.contactLabel')}: {h.admin_contact.name}
+                          </span>
+                        )}
                       </div>
                     )}
                   </td>
