@@ -310,6 +310,21 @@ export async function triggerHostPull(host) {
   return response.json();
 }
 
+// Confirms a suspected-ransomware event was reviewed and resumes pulls for
+// this container (releases the zfs hold pull.sh placed on the last
+// known-good snapshot).
+export async function acknowledgeRansomware(host, container, note = '') {
+  const response = await fetchWithAuth(
+    `/api/admin/hosts/${encodeURIComponent(host)}/containers/${encodeURIComponent(container)}/acknowledge-ransomware`,
+    { method: 'POST', body: JSON.stringify({ note }) },
+  );
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || 'Failed to acknowledge');
+  }
+  return response.json();
+}
+
 // Starts a GFS prune run immediately instead of waiting for its daily
 // 04:00 timer. Returns as soon as it's queued, not once it's finished.
 export async function triggerPruneNow() {

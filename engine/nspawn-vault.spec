@@ -109,6 +109,34 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-check.timer nspawn-vault-prune.timer
 
 %changelog
+* Tue Jul 28 2026 Developer <dev@example.com> - 0.1.0-12
+- Auto-pauses pull.sh for a container once ransomware_suspected trips,
+  instead of just alerting: it now places a `zfs hold` (tag
+  nspawn-vault-ransomware) on the last known-good snapshot - protecting it
+  from gfs-prune.sh regardless of GFS retention settings or storage
+  pressure - and writes a marker under the new
+  /var/lib/nspawn-vault/state/paused/ that every future pull for that
+  container checks first, skipping entirely (without touching the state
+  JSON) until an admin acknowledges the event in nspawn-vault-web. Built
+  after a live incident where a colleague's brand-new container tripped
+  the heuristic during normal setup (bulk file copy-in) - alerting alone
+  doesn't stop new (possibly-bad) snapshots from continuing to displace
+  the last good one out of GFS's retention window if nobody notices in
+  time; pausing does. See nspawn-vault-web 0.1.0-29 for the matching
+  "Acknowledge & resume" UI/endpoint that releases the hold and clears
+  the pause marker.
+- Adds RANSOMWARE_GRACE_PULLS (new notify.conf key, default 3): the
+  zfs-diff check is skipped for a container's first N pulls, not just the
+  very first one as before - covers the common case of a newly created
+  container being actively populated over several pulls, not just one.
+  Deliberate default *behavior change* (the check used to start on pull
+  #2, now starts on pull #4 by default) aimed at exactly this scenario.
+- gfs-prune.sh no longer aborts an entire prune run if a single
+  `zfs destroy` fails (e.g. against a held snapshot) - warns and continues
+  with the rest of that dataset's prunable snapshots instead. Needed for
+  the hold above to actually protect anything; also a general robustness
+  fix independent of it.
+
 * Thu Jul 16 2026 Developer <dev@example.com> - 0.1.0-11
 - Adds a repeat-alert backoff to check-stale.sh: previously, an ongoing
   incident (a source host down for hours) re-fired Pushover/Slack/email on

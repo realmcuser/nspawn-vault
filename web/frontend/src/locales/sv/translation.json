@@ -55,7 +55,13 @@
     "browseTitle": "Bläddra: {{container}}",
     "emptyDirectory": "Tom katalog.",
     "loadMore": "Visar {{shown}} av {{total}} - visa fler",
-    "ransomwareHint": "Misstänkt ransomware: {{count}} ändrade filer sedan föregående snapshot."
+    "ransomwareHint": "Misstänkt ransomware: {{count}} ändrade filer sedan föregående snapshot.",
+    "ransomwarePausedHint": "Kommande pullar för den här containern är pausade tills händelsen bekräftats.",
+    "ransomwareAwaitingRecheck": "Bekräftad - väntar på nästa pull för att bekräfta att det är löst.",
+    "acknowledgeButton": "Bekräfta & återuppta",
+    "acknowledgeConfirmPrompt": "Valfri kommentar (varför detta är förväntat):",
+    "acknowledgeSuccess": "Bekräftat - pullar återupptas nästa körning.",
+    "acknowledgeError": "Kunde inte bekräfta."
   },
   "alert": {
     "staleTitle": "Backup(er) ej bekräftat friska",
@@ -185,7 +191,10 @@
       "sendTestEmail": "Skicka testmejl",
       "ransomwareTitle": "Ransomware-detektering",
       "ransomwareHint": "Vid varje pull jämförs den nya snapshoten mot föregående via \"zfs diff\". Når antalet ändrade/tillagda/borttagna filer detta tröskelvärde larmas det direkt (samma kanaler som ovan, plus en egen banner i dashboarden). 0 stänger av kontrollen.",
-      "ransomwareThreshold": "Tröskelvärde (antal ändrade filer)"
+      "ransomwareThreshold": "Tröskelvärde (antal ändrade filer)",
+      "graceTitle": "Startsträcka för ransomware-kontrollen",
+      "graceHint": "Kontrollen ovan hoppas över för en containers första N pullar - en nyskapad container fylls ofta med filer under sina första körningar, vilket annars skulle trippa tröskeln på helt legitim grund. Kontrollen börjar alltså från pull nr N+1.",
+      "graceLabel": "Antal pullar innan kontrollen börjar"
     },
     "audit": {
       "title": "Revisionslogg",

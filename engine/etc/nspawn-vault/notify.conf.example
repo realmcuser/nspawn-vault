@@ -35,3 +35,16 @@ ALERT_BACKOFF_HOURS=6
 # finns - stora/dynamiska containrar (t.ex. mycket loggskrivning) kan behöva
 # ett högre värde för att undvika falsklarm.
 RANSOMWARE_DIFF_THRESHOLD=500
+
+# När tröskeln ovan nås: pull.sh sätter en "zfs hold" på senaste kända-goda
+# snapshotten (så gfs-prune.sh aldrig kan radera den, oavsett GFS-retention
+# eller lagringstryck) och pausar containerns kommande pullar tills någon
+# bekräftat händelsen i nspawn-vault-web:s dashboard/host-vy. Detta gäller
+# oavsett RANSOMWARE_GRACE_PULLS nedan.
+#
+# En nyskapad container fylls ofta med filer under sina första körningar
+# (initial datamigrering, containern sätts upp etc.) - helt legitimt, men
+# skulle annars trippa tröskeln direkt. RANSOMWARE_GRACE_PULLS hoppar över
+# själva zfs-diff-kontrollen för en containers första N pullar (kontrollen
+# börjar alltså från pull nr N+1). Default 3.
+RANSOMWARE_GRACE_PULLS=3

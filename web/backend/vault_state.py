@@ -71,3 +71,28 @@ def changed_entries(state: Optional[dict]) -> int:
         return int(state.get("changed_entries", 0))
     except (TypeError, ValueError):
         return 0
+
+
+PAUSED_DIR = STATE_DIR / "paused"
+
+
+def pause_marker_path(host: str, container: str) -> Path:
+    """Exact port of pull.sh: PAUSE_MARKER="$STATE_DIR/paused/${HOST}_${NAME}" """
+    return PAUSED_DIR / f"{host}_{container}"
+
+
+def read_pause_marker(host: str, container: str) -> Optional[dict]:
+    """{"snap", "dataset", "detected_ts", "changed_entries"} written by
+    pull.sh when it auto-pauses a container on ransomware_suspected - None
+    once acknowledged (marker deleted) or if it was never paused."""
+    path = pause_marker_path(host, container)
+    if not path.is_file():
+        return None
+    try:
+        return json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def is_paused(host: str, container: str) -> bool:
+    return pause_marker_path(host, container).is_file()

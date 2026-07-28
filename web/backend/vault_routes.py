@@ -38,10 +38,15 @@ class NotifySettingsMasked(BaseModel):
     smtp_pass: str = ""
     ransomware_diff_threshold: str = "500"
     alert_backoff_hours: str = "6"
+    ransomware_grace_pulls: str = "3"
 
 
 class TestEmailRequest(BaseModel):
     to: str
+
+
+class AcknowledgeRansomware(BaseModel):
+    note: str = ""
 
 
 class HostEmailsUpdate(BaseModel):
@@ -143,6 +148,7 @@ async def get_host_detail(host: str, current_user=Depends(get_current_user)):
             "retention": vault_zfs.snapshot_retention(dataset, gfs_conf),
             "changed_entries": vault_state.changed_entries(state),
             "ransomware_suspected": bool(state.get("ransomware_suspected")) if state else False,
+            "paused": vault_state.is_paused(host, container),
         })
 
     return {
@@ -332,6 +338,41 @@ async def download_container_archive(
         media_type=vault_archive.archive_media_type(compression),
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.post("/api/admin/hosts/{host}/containers/{container}/acknowledge-ransomware")
+async def acknowledge_ransomware(
+    request: Request,
+    host: str,
+    container: str,
+    data: AcknowledgeRansomware,
+    current_user=Depends(get_current_admin),
+    db=Depends(get_db),
+):
+    """Confirms a suspected-ransomware event was reviewed and releases the
+    zfs hold pull.sh placed on the last known-good snapshot, so future pulls
+    for this container resume (see pull.sh's PAUSE_MARKER check). Does NOT
+    itself clear ransomware_suspected in the state JSON - that only happens
+    once a fresh pull actually reruns the zfs-diff check, so the UI keeps
+    showing the container as suspect (just no longer "paused") until that
+    next pull confirms it's resolved."""
+    host = unquote(host)
+    container = unquote(container)
+    _validate_host_container(host, container)
+
+    marker = vault_state.read_pause_marker(host, container)
+    if marker is None:
+        raise HTTPException(status_code=404, detail="No paused/suspected state for this container")
+
+    vault_zfs.release_hold(marker["dataset"], marker["snap"])
+    vault_state.pause_marker_path(host, container).unlink(missing_ok=True)
+
+    vault_audit.log_action(
+        db, current_user.username, "acknowledge_ransomware", host, container,
+        snapshot=marker.get("snap"), detail=data.note,
+        client_ip=request.client.host if request.client else None,
+    )
+    return {"host": host, "container": container, "acknowledged": True}
 
 
 @router.get("/api/settings/gfs")

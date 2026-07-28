@@ -24,8 +24,14 @@ count=0
 while IFS= read -r snap; do
     [ -z "$snap" ] && continue
     echo "Raderar: ${DATASET}@${snap}" >&2
-    zfs destroy "${DATASET}@${snap}"
-    count=$((count+1))
+    # En held snapshot (t.ex. nspawn-vault-ransomware-holdet) ska inte
+    # avbryta hela pruningen för resten av datasetets snapshots - varna
+    # och fortsätt i stället.
+    if zfs destroy "${DATASET}@${snap}"; then
+        count=$((count+1))
+    else
+        echo "VARNING: kunde inte radera ${DATASET}@${snap} (held/busy?) - hoppar över" >&2
+    fi
 done <<< "$to_delete"
 
 echo "Rensade $count snapshots" >&2

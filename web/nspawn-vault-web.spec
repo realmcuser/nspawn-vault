@@ -120,6 +120,25 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-web.service
 
 %changelog
+* Tue Jul 28 2026 Developer <dev@example.com> - 0.1.0-29
+- Adds "Acknowledge & resume" to the host detail page: when a container is
+  auto-paused by pull.sh (nspawn-vault 0.1.0-12, on ransomware_suspected),
+  its status row now shows this instead of just the existing ransomware
+  hint, admin-only. Confirming calls the new POST
+  /api/admin/hosts/{host}/containers/{container}/acknowledge-ransomware,
+  which releases the zfs hold pull.sh placed on the last known-good
+  snapshot and deletes the pause marker so the container's normal pull
+  timer resumes, and logs the action (with an optional free-text note) to
+  the existing audit log. Deliberately does not clear
+  ransomware_suspected itself in the state JSON - the row instead shows
+  an "awaiting recheck" hint until the next real pull confirms the
+  container is actually clean again.
+- get_host_detail()'s per-container payload gains a "paused" boolean;
+  Admin > Notifications gains a "Ransomware check grace period" field for
+  the matching new RANSOMWARE_GRACE_PULLS notify.conf key (nspawn-vault
+  0.1.0-12), same plaintext/digits-only/shell-quoted pattern as the
+  existing ransomware threshold and backoff-hours fields.
+
 * Thu Jul 16 2026 Developer <dev@example.com> - 0.1.0-28
 - Exposes the new ALERT_BACKOFF_HOURS setting (nspawn-vault 0.1.0-11) in
   Admin > Notifications - a new "Repeat-alert backoff" field, plaintext

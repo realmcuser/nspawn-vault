@@ -180,6 +180,20 @@ def snapshot_retention(dataset: str, gfs_conf: dict) -> dict | None:
     }
 
 
+RANSOMWARE_HOLD_TAG = "nspawn-vault-ransomware"
+
+
+def release_hold(dataset: str, snapshot: str, tag: str = RANSOMWARE_HOLD_TAG) -> bool:
+    """Releases the zfs hold pull.sh places on the last known-good snapshot
+    when ransomware_suspected trips - called by the acknowledge-ransomware
+    endpoint once an admin has confirmed the event and pulls are about to
+    resume. `snapshot` is always a pull.sh-generated YYYYMMDD-HHMMSS name
+    read back out of our own pause-marker JSON, not user input."""
+    dataset = _safe(dataset)
+    proc = _run(["zfs", "release", tag, f"{dataset}@{snapshot}"])
+    return proc.returncode == 0
+
+
 def list_snapshots(dataset: str) -> list[dict]:
     """Sorted oldest-first (matches gfs-prune.sh's `-s creation`), so callers
     take [-1] for the latest snapshot."""

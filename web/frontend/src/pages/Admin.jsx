@@ -22,6 +22,7 @@ const EMPTY_NOTIFY = {
   smtp_host: '', smtp_port: '587', smtp_tls_mode: 'starttls', smtp_from: '',
   smtp_user: '', smtp_pass: '',
   ransomware_diff_threshold: '500',
+  ransomware_grace_pulls: '3',
   alert_backoff_hours: '6',
 };
 
@@ -954,6 +955,22 @@ const Admin = () => {
                 value={notify.ransomware_diff_threshold}
                 onChange={(e) => setNotify((p) => ({ ...p, ransomware_diff_threshold: e.target.value }))}
                 placeholder="500"
+                className="w-full bg-background border border-border rounded px-3 py-2 text-text text-sm focus:outline-none focus:border-primary font-mono"
+              />
+            </div>
+          </div>
+
+          <div className="border-t border-border pt-4">
+            <p className="text-sm font-medium text-text-muted mb-1">{t('admin.notify.graceTitle')}</p>
+            <p className="text-xs text-text-muted mb-3">{t('admin.notify.graceHint')}</p>
+            <div className="max-w-xs">
+              <label className="block text-sm text-text-muted mb-1">{t('admin.notify.graceLabel')}</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={notify.ransomware_grace_pulls}
+                onChange={(e) => setNotify((p) => ({ ...p, ransomware_grace_pulls: e.target.value }))}
+                placeholder="3"
                 className="w-full bg-background border border-border rounded px-3 py-2 text-text text-sm focus:outline-none focus:border-primary font-mono"
               />
             </div>

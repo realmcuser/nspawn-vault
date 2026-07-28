@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Archive, Database, Play, Loader2, Check, Download, FolderOpen } from 'lucide-react';
 import {
   fetchHostDetail, fetchContainerLog, triggerHostPull,
-  fetchContainerSnapshots, buildContainerDownloadUrl,
+  fetchContainerSnapshots, buildContainerDownloadUrl, acknowledgeRansomware,
 } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import StatusBadge from '../components/StatusBadge';
@@ -25,6 +25,8 @@ const HostDetail = () => {
   const [triggerResult, setTriggerResult] = useState(null);
   const [downloadModal, setDownloadModal] = useState(null); // { container, loading, error, snapshots, snapshot, compression }
   const [browseContainer, setBrowseContainer] = useState(null);
+  const [acking, setAcking] = useState(null); // container name currently being acknowledged
+  const [ackResult, setAckResult] = useState(null); // { container, success, message }
 
   useEffect(() => {
     fetchHostDetail(host)
@@ -68,6 +70,23 @@ const HostDetail = () => {
       });
     } catch (err) {
       setDownloadModal({ container, loading: false, error: err.message, snapshots: [], snapshot: '', compression: 'zstd' });
+    }
+  };
+
+  const handleAcknowledge = async (container) => {
+    const note = window.prompt(t('host.acknowledgeConfirmPrompt'));
+    if (note === null) return; // cancelled
+    setAcking(container);
+    setAckResult(null);
+    try {
+      await acknowledgeRansomware(host, container, note);
+      setAckResult({ container, success: true, message: t('host.acknowledgeSuccess') });
+      const fresh = await fetchHostDetail(host);
+      setDetail(fresh);
+    } catch (err) {
+      setAckResult({ container, success: false, message: err.message });
+    } finally {
+      setAcking(null);
     }
   };
 
@@ -175,10 +194,31 @@ const HostDetail = () => {
                     {!detail.pull_running && c.status === 'failed' && c.last_pull_msg && (
                       <p className="text-xs text-red-400/80 mt-1">{c.last_pull_msg}</p>
                     )}
-                    {!detail.pull_running && c.ransomware_suspected && (
-                      <p className="text-xs text-red-400/80 mt-1">
-                        {t('host.ransomwareHint', { count: c.changed_entries })}
-                      </p>
+                    {!detail.pull_running && c.ransomware_suspected && c.paused && (
+                      <div className="mt-1">
+                        <p className="text-xs text-red-400/80">
+                          {t('host.ransomwareHint', { count: c.changed_entries })}
+                        </p>
+                        <p className="text-xs text-red-300/80">{t('host.ransomwarePausedHint')}</p>
+                        {isAdmin && (
+                          <button
+                            onClick={() => handleAcknowledge(c.name)}
+                            disabled={acking === c.name}
+                            className="mt-1 inline-flex items-center gap-1 px-2 py-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white rounded text-xs font-medium transition-colors"
+                          >
+                            {acking === c.name && <Loader2 className="w-3 h-3 animate-spin" />}
+                            {t('host.acknowledgeButton')}
+                          </button>
+                        )}
+                        {ackResult && ackResult.container === c.name && (
+                          <p className={`text-xs mt-1 ${ackResult.success ? 'text-green-400' : 'text-red-400'}`}>
+                            {ackResult.message}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {!detail.pull_running && c.ransomware_suspected && !c.paused && (
+                      <p className="text-xs text-red-400/80 mt-1">{t('host.ransomwareAwaitingRecheck')}</p>
                     )}
                   </td>
                   <td className="px-4 py-3 font-mono text-text-muted text-xs">{c.last_snapshot || '—'}</td>

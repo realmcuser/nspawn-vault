@@ -47,6 +47,17 @@ fail() {
     exit 1
 }
 
+# Auto-paus vid misstänkt ransomware (se steg 4 nedan): så länge denna
+# markörfil finns hoppas pullen över helt, utan att röra state-JSON:en -
+# vilket låter den åldras och trigga check-stale.sh:s vanliga stale-larm
+# också, som en andra påminnelse om att någon behöver bekräfta i UI:et.
+# Tas bort av web-backendens "acknowledge & resume"-endpoint.
+PAUSE_MARKER="$STATE_DIR/paused/${HOST}_${NAME}"
+if [ -f "$PAUSE_MARKER" ]; then
+    echo "PAUSED: $HOST/$NAME väntar på bekräftelse i UI:et, hoppar över pull" >&2
+    exit 0
+fi
+
 echo "=== Pull $NAME from $HOST ===" >&2
 
 # 1) DB-snapshot om konfigurerad (no-op om ingen .conf finns).
@@ -76,17 +87,32 @@ NOTIFY_CONF=/etc/nspawn-vault/notify.conf
 [ -f "$NOTIFY_CONF" ] && source "$NOTIFY_CONF"
 THRESHOLD="${RANSOMWARE_DIFF_THRESHOLD:-500}"
 case "$THRESHOLD" in ''|*[!0-9]*) THRESHOLD=500 ;; esac
+# Grace period: hoppa över kontrollen för en containers första GRACE_PULLS
+# pullar - en nyskapad container fylls ofta med filer under sina första
+# körningar (initial datamigrering etc.), vilket annars trippar tröskeln
+# på helt legitim grund. Default 3 = kontrollen börjar från 4:e pullen.
+GRACE_PULLS="${RANSOMWARE_GRACE_PULLS:-3}"
+case "$GRACE_PULLS" in ''|*[!0-9]*) GRACE_PULLS=3 ;; esac
 
 CHANGED=0
 SUSPECTED=false
 if [ "$THRESHOLD" -gt 0 ]; then
     SNAP_COUNT=$(zfs list -H -o name -t snapshot "$DATASET" 2>/dev/null | wc -l)
-    if [ "$SNAP_COUNT" -ge 2 ]; then
+    if [ "$SNAP_COUNT" -gt "$GRACE_PULLS" ]; then
         PREV_SNAP=$(zfs list -H -o name -t snapshot -s creation "$DATASET" 2>/dev/null | tail -2 | head -1)
         CHANGED=$(zfs diff -H "$PREV_SNAP" "$SNAP" 2>/dev/null | wc -l) || CHANGED=0
         if [ "$CHANGED" -ge "$THRESHOLD" ]; then
             SUSPECTED=true
             echo "VARNING: $CHANGED ändrade poster sedan föregående snapshot (tröskel: $THRESHOLD) - möjlig ransomware, se dashboarden" >&2
+            # Skydda den senaste kända-goda snapshotten från gfs-prune.sh
+            # oavsett GFS-retention/lagringstryck, tills någon bekräftat i
+            # UI:et. Best-effort - ska aldrig få en i övrigt lyckad pull
+            # att misslyckas.
+            zfs hold nspawn-vault-ransomware "$PREV_SNAP" 2>/dev/null || true
+            mkdir -p "$STATE_DIR/paused"
+            printf '{"snap":"%s","dataset":"%s","detected_ts":"%s","changed_entries":%s}\n' \
+                "${PREV_SNAP#*@}" "$DATASET" "$(date -Iseconds)" "$CHANGED" \
+                > "$STATE_DIR/paused/${HOST}_${NAME}"
         fi
     fi
 fi

@@ -204,12 +204,17 @@ def read_notify_conf() -> dict:
         alert_backoff_hours = int(values.get("ALERT_BACKOFF_HOURS", 6))
     except ValueError:
         alert_backoff_hours = 6
+    try:
+        ransomware_grace_pulls = int(values.get("RANSOMWARE_GRACE_PULLS", 3))
+    except ValueError:
+        ransomware_grace_pulls = 3
     return {
         "pushover_configured": bool(values.get("PUSHOVER_TOKEN")) and bool(values.get("PUSHOVER_USER")),
         "slack_configured": bool(values.get("SLACK_URL")),
         "smtp_configured": bool(values.get("SMTP_HOST")),
         "ransomware_diff_threshold": ransomware_threshold,
         "alert_backoff_hours": alert_backoff_hours,
+        "ransomware_grace_pulls": ransomware_grace_pulls,
     }
 
 
@@ -232,6 +237,7 @@ def read_notify_conf_masked() -> dict:
         "smtp_pass": SECRET_SENTINEL if values.get("SMTP_PASS") else "",
         "ransomware_diff_threshold": values.get("RANSOMWARE_DIFF_THRESHOLD", "500"),
         "alert_backoff_hours": values.get("ALERT_BACKOFF_HOURS", "6"),
+        "ransomware_grace_pulls": values.get("RANSOMWARE_GRACE_PULLS", "3"),
     }
 
 
@@ -260,6 +266,10 @@ def write_notify_conf(values: dict) -> None:
     if not alert_backoff_hours.isdigit():
         raise ValueError(f"invalid alert backoff hours: {alert_backoff_hours!r}")
 
+    ransomware_grace_pulls = str(values.get("ransomware_grace_pulls") or "3").strip()
+    if not ransomware_grace_pulls.isdigit():
+        raise ValueError(f"invalid ransomware grace pulls: {ransomware_grace_pulls!r}")
+
     lines = [
         "# Pushover for the dead-man's-switch alert - managed via nspawn-vault-web Admin",
         f"PUSHOVER_TOKEN={_shell_quote(token)}",
@@ -278,6 +288,9 @@ def write_notify_conf(values: dict) -> None:
         f"SMTP_PASS={_shell_quote(smtp_pass)}",
         "# Ransomware-heuristik (0 = av) - se notify.conf.example för detaljer",
         f"RANSOMWARE_DIFF_THRESHOLD={_shell_quote(ransomware_threshold)}",
+        "# Grace period: kontrollen ovan hoppas över för en containers första",
+        "# N pullar (nyskapad/aktivt uppsatt container) - se notify.conf.example",
+        f"RANSOMWARE_GRACE_PULLS={_shell_quote(ransomware_grace_pulls)}",
         "# Upprepningsspärr för larm, timmar (0 = larma varje check-stale.sh-körning)",
         f"ALERT_BACKOFF_HOURS={_shell_quote(alert_backoff_hours)}",
         "",

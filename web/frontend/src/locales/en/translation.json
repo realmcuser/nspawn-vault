@@ -55,7 +55,13 @@
     "browseTitle": "Browse: {{container}}",
     "emptyDirectory": "Empty directory.",
     "loadMore": "Showing {{shown}} of {{total}} - load more",
-    "ransomwareHint": "Suspected ransomware: {{count}} changed files since the previous snapshot."
+    "ransomwareHint": "Suspected ransomware: {{count}} changed files since the previous snapshot.",
+    "ransomwarePausedHint": "Future pulls for this container are paused until the event is acknowledged.",
+    "ransomwareAwaitingRecheck": "Acknowledged - waiting for the next pull to confirm this is resolved.",
+    "acknowledgeButton": "Acknowledge & resume",
+    "acknowledgeConfirmPrompt": "Optional note (why this is expected):",
+    "acknowledgeSuccess": "Acknowledged - pulls resume on the next run.",
+    "acknowledgeError": "Failed to acknowledge."
   },
   "alert": {
     "staleTitle": "Backup(s) not confirmed healthy",
@@ -185,7 +191,10 @@
       "sendTestEmail": "Send test email",
       "ransomwareTitle": "Ransomware detection",
       "ransomwareHint": "Every pull compares the new snapshot against the previous one via \"zfs diff\". If the number of changed/added/removed files reaches this threshold, it alerts immediately (same channels as above, plus its own banner on the dashboard). 0 disables the check.",
-      "ransomwareThreshold": "Threshold (changed files)"
+      "ransomwareThreshold": "Threshold (changed files)",
+      "graceTitle": "Ransomware check grace period",
+      "graceHint": "The check above is skipped for a container's first N pulls - a newly created container is often actively populated with files during its first few runs, which would otherwise trip the threshold on entirely legitimate grounds. The check starts from pull N+1 onward.",
+      "graceLabel": "Pulls before the check starts"
     },
     "audit": {
       "title": "Audit Log",
