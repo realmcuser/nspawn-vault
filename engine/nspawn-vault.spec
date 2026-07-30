@@ -109,6 +109,29 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-check.timer nspawn-vault-prune.timer
 
 %changelog
+* Thu Jul 30 2026 Developer <dev@example.com> - 0.1.0-15
+- Suppresses ransomware-suspected false positives caused by a real
+  dnf/dnf-automatic package update, instead of just tolerating a bigger
+  threshold. Found live on fhdcore-jf2: a routine dnf-automatic update
+  rebuilds its whole runtime environment and touches ~12,000 files in
+  one pull - no fixed threshold both catches real ransomware and
+  tolerates an update that size.
+- pull.sh already rsyncs the whole container filesystem before computing
+  the diff, so /var/log/dnf.log (and dnf.rpm.log) - an ordinary file in
+  that tree, with its original mtime preserved by rsync -a - can be
+  compared against the previous snapshot's own creation time (zfs
+  already tracks this as raw epoch seconds via `get -p creation`). If
+  the log is newer than the previous snapshot, a real package
+  transaction happened in between and the diff is explained without
+  being ransomware - ransomware_suspected/the zfs hold/the pause all get
+  skipped, but changed_entries still records the real count and a new
+  dnf_update_detected:true field in the state JSON keeps the reason
+  visible rather than the alert just silently not firing. Catches a
+  human running "dnf upgrade" manually too, not just dnf-automatic
+  specifically - deliberately not gated on whether dnf-automatic.timer
+  is enabled, since the log-mtime check is strictly more general. See
+  nspawn-vault-web 0.1.0-33 for the matching dashboard hint.
+
 * Tue Jul 28 2026 Developer <dev@example.com> - 0.1.0-14
 - Fixes read_host_language() (added in 0.1.0-13): it redirected `tr`'s
   stdin from `<host>/notify-language` without checking the file exists

@@ -120,6 +120,14 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-web.service
 
 %changelog
+* Thu Jul 30 2026 Developer <dev@example.com> - 0.1.0-33
+- Host detail page shows a new calm, non-alarming hint on a container
+  whose last pull had a large diff that was explained away by a real
+  dnf/dnf-automatic update (nspawn-vault 0.1.0-15's dnf_update_detected)
+  instead of just going quiet with no visible trace of the (large but
+  legitimate) changed-file count. get_host_detail()'s per-container
+  payload gains the passthrough field.
+
 * Tue Jul 28 2026 Developer <dev@example.com> - 0.1.0-32
 - Merges the Source Hosts table's separate "Containers" and "Email
   alerts" columns into one "Containers & email alerts" column, with

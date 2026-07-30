@@ -58,6 +58,7 @@
     "ransomwareHint": "Misstänkt ransomware: {{count}} ändrade filer sedan föregående snapshot.",
     "ransomwarePausedHint": "Kommande pullar för den här containern är pausade tills händelsen bekräftats.",
     "ransomwareAwaitingRecheck": "Bekräftad - väntar på nästa pull för att bekräfta att det är löst.",
+    "dnfUpdateHint": "{{count}} filer ändrades, men en dnf-uppdatering upptäcktes i loggen (var/log/dnf.log) - flaggas inte som ransomware.",
     "acknowledgeButton": "Bekräfta & återuppta",
     "acknowledgeConfirmPrompt": "Valfri kommentar (varför detta är förväntat):",
     "acknowledgeSuccess": "Bekräftat - pullar återupptas nästa körning.",

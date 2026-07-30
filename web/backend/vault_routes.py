@@ -158,6 +158,7 @@ async def get_host_detail(host: str, current_user=Depends(get_current_user)):
             "retention": vault_zfs.snapshot_retention(dataset, gfs_conf),
             "changed_entries": vault_state.changed_entries(state),
             "ransomware_suspected": bool(state.get("ransomware_suspected")) if state else False,
+            "dnf_update_detected": bool(state.get("dnf_update_detected")) if state else False,
             "paused": vault_state.is_paused(host, container),
         })
 

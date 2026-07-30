@@ -96,27 +96,50 @@ case "$GRACE_PULLS" in ''|*[!0-9]*) GRACE_PULLS=3 ;; esac
 
 CHANGED=0
 SUSPECTED=false
+DNF_UPDATE_DETECTED=false
 if [ "$THRESHOLD" -gt 0 ]; then
     SNAP_COUNT=$(zfs list -H -o name -t snapshot "$DATASET" 2>/dev/null | wc -l)
     if [ "$SNAP_COUNT" -gt "$GRACE_PULLS" ]; then
         PREV_SNAP=$(zfs list -H -o name -t snapshot -s creation "$DATASET" 2>/dev/null | tail -2 | head -1)
         CHANGED=$(zfs diff -H "$PREV_SNAP" "$SNAP" 2>/dev/null | wc -l) || CHANGED=0
         if [ "$CHANGED" -ge "$THRESHOLD" ]; then
-            SUSPECTED=true
-            echo "VARNING: $CHANGED ändrade poster sedan föregående snapshot (tröskel: $THRESHOLD) - möjlig ransomware, se dashboarden" >&2
-            # Skydda den senaste kända-goda snapshotten från gfs-prune.sh
-            # oavsett GFS-retention/lagringstryck, tills någon bekräftat i
-            # UI:et. Best-effort - ska aldrig få en i övrigt lyckad pull
-            # att misslyckas.
-            zfs hold nspawn-vault-ransomware "$PREV_SNAP" 2>/dev/null || true
-            mkdir -p "$STATE_DIR/paused"
-            printf '{"snap":"%s","dataset":"%s","detected_ts":"%s","changed_entries":%s}\n' \
-                "${PREV_SNAP#*@}" "$DATASET" "$(date -Iseconds)" "$CHANGED" \
-                > "$STATE_DIR/paused/${HOST}_${NAME}"
+            # Ett riktigt dnf/dnf-automatic-paketuppdatering kan i sig
+            # ändra tusentals filer helt legitimt (sett live på
+            # fhdcore-jf2, ~12000 filer). /var/log/dnf.log är en vanlig
+            # fil i det som redan rsyncats hem, och rsync -a bevarar dess
+            # ursprungliga mtime - så att jämföra den mot PREV_SNAP:s egen
+            # skapelsetid (zfs har redan detta, "get -p" ger rått
+            # epoksekunder) är konkret bevis, inte en gissning. Fångar
+            # även en människa som kör "dnf upgrade" manuellt.
+            PREV_SNAP_EPOCH=$(zfs get -H -o value -p creation "$PREV_SNAP" 2>/dev/null || echo 0)
+            for dnf_log in "$MNT/var/log/dnf.log" "$MNT/var/log/dnf.rpm.log"; do
+                [ -f "$dnf_log" ] || continue
+                log_epoch=$(stat -c %Y "$dnf_log" 2>/dev/null || echo 0)
+                if [ "$log_epoch" -gt "$PREV_SNAP_EPOCH" ]; then
+                    DNF_UPDATE_DETECTED=true
+                    break
+                fi
+            done
+
+            if [ "$DNF_UPDATE_DETECTED" = true ]; then
+                echo "INFO: $CHANGED ändrade poster, men dnf-loggen visar en paketuppdatering sedan föregående snapshot - flaggar inte som ransomware" >&2
+            else
+                SUSPECTED=true
+                echo "VARNING: $CHANGED ändrade poster sedan föregående snapshot (tröskel: $THRESHOLD) - möjlig ransomware, se dashboarden" >&2
+                # Skydda den senaste kända-goda snapshotten från gfs-prune.sh
+                # oavsett GFS-retention/lagringstryck, tills någon bekräftat i
+                # UI:et. Best-effort - ska aldrig få en i övrigt lyckad pull
+                # att misslyckas.
+                zfs hold nspawn-vault-ransomware "$PREV_SNAP" 2>/dev/null || true
+                mkdir -p "$STATE_DIR/paused"
+                printf '{"snap":"%s","dataset":"%s","detected_ts":"%s","changed_entries":%s}\n' \
+                    "${PREV_SNAP#*@}" "$DATASET" "$(date -Iseconds)" "$CHANGED" \
+                    > "$STATE_DIR/paused/${HOST}_${NAME}"
+            fi
         fi
     fi
 fi
 
-printf '{"result":"success","ts":"%s","snap":"%s","changed_entries":%s,"ransomware_suspected":%s}\n' \
-    "$(date -Iseconds)" "$SNAP" "$CHANGED" "$SUSPECTED" > "$STATE"
+printf '{"result":"success","ts":"%s","snap":"%s","changed_entries":%s,"ransomware_suspected":%s,"dnf_update_detected":%s}\n' \
+    "$(date -Iseconds)" "$SNAP" "$CHANGED" "$SUSPECTED" "$DNF_UPDATE_DETECTED" > "$STATE"
 echo "=== Done ===" >&2
