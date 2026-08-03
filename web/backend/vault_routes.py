@@ -191,7 +191,7 @@ async def get_container_pull_log(host: str, container: str, current_user=Depends
     return {
         "unit": f"nspawn-vault-pull@{host}.service",
         "ts": ts,
-        "log": vault_systemd.fetch_pull_log(host),
+        "log": vault_systemd.fetch_pull_log(host, container),
     }
 
 

@@ -283,6 +283,7 @@ const HostDetail = () => {
               <p className="text-xs text-text-muted mb-2">
                 {t('host.logLastResult')}: {formatTimestamp(logModal.data.ts)}
               </p>
+              <p className="text-xs text-text-muted mb-2">{t('host.logScopeHint')}</p>
               <pre className="text-xs font-mono text-text-muted whitespace-pre-wrap bg-background rounded-lg p-4 overflow-auto max-h-[60vh]">
                 {logModal.data.log}
               </pre>

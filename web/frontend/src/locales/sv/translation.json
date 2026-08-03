@@ -41,6 +41,7 @@
     "viewLog": "Visa logg",
     "logTitle": "Pull-logg: {{container}}",
     "logLastResult": "Senast registrerade resultat",
+    "logScopeHint": "Filtrerad till den här containern - den underliggande körningen pullar alla containrar på hosten tillsammans, så någon enstaka orelaterad rad kan fortfarande slinka med.",
     "noLogAvailable": "Ingen loggdata hittades för denna pull (kontrollera att journalen inte hunnit rensas).",
     "dbBackedUpHint": "Senaste lyckade pull inkluderade en databasdump",
     "runNow": "Kör nu",

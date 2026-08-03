@@ -42,9 +42,52 @@ mkdir -p "$STATE_DIR"
 STATE="$STATE_DIR/${DATASET//\//_}.json"
 
 fail() {
-    printf '{"result":"failed","ts":"%s","msg":"%s"}\n' "$(date -Iseconds)" "$1" > "$STATE"
+    # $1 is JSON-escaped here rather than left raw - every caller used to
+    # pass a static string with no quotes/newlines in it, so this was never
+    # hit, but run_remote() below now passes real captured command output,
+    # which can easily contain either and would otherwise produce invalid
+    # JSON in the state file.
+    local msg
+    msg=$(printf '%s' "$1" | tr '\n' ' ' | sed 's/\\/\\\\/g; s/"/\\"/g')
+    printf '{"result":"failed","ts":"%s","msg":"%s"}\n' "$(date -Iseconds)" "$msg" > "$STATE"
     echo "FAILED: $1" >&2
     exit 1
+}
+
+# Runs one dispatch.sh-whitelisted command on the source host and, on
+# failure, folds its actual captured output into fail()'s msg instead of a
+# generic canned string - so a failed DB dump/pre-snapshot hook shows the
+# real reason (e.g. "mysqldump failed - is MariaDB running...") directly in
+# the web UI's per-container line, without needing to open the pull log.
+run_remote() {
+    local step="$1" cmd="$2" out
+    if ! out=$("${SSH[@]}" "$HOST" "$cmd" 2>&1); then
+        local last_line="${out##*$'\n'}"
+        fail "$step: ${last_line:-no output (SSH/network failure?)}"
+    fi
+}
+
+# Same as run_remote(), but treats a source host whose dispatch.sh doesn't
+# recognize this command yet (the exact rejection dispatch.sh's own default
+# case prints) as "not upgraded yet", not a failure - logs a warning and
+# lets the pull continue. Needed because pre-snapshot is a new command
+# (nspawn-vault 0.1.0-16): across a fleet, the vault's own package upgrades
+# independently of each source host's source-host/dispatch.sh being
+# manually re-installed there (see CLAUDE.md's source-host/ note) - without
+# this, every pull for every not-yet-upgraded source host would hard-fail
+# the moment the vault side alone is upgraded. Confirmed live: this exact
+# scenario broke every pull for fhdcore-jf.vpn.fhd.se the moment pull.sh
+# was updated ahead of its dispatch.sh, 2026-08-03.
+run_remote_optional() {
+    local step="$1" cmd="$2" out
+    if ! out=$("${SSH[@]}" "$HOST" "$cmd" 2>&1); then
+        if [[ "$out" == *"dispatch.sh: rejected command"* ]]; then
+            echo "VARNING: $HOST känner inte igen '$cmd' än (source-host/dispatch.sh behöver uppdateras där) - hoppar över detta steg för denna pull" >&2
+        else
+            local last_line="${out##*$'\n'}"
+            fail "$step: ${last_line:-no output (SSH/network failure?)}"
+        fi
+    fi
 }
 
 # Auto-paus vid misstänkt ransomware (se steg 4 nedan): så länge denna
@@ -60,11 +103,14 @@ fi
 
 echo "=== Pull $NAME from $HOST ===" >&2
 
-# 1) DB-snapshot om konfigurerad (no-op om ingen .conf finns).
+# 1) Valfri generisk pre-snapshot-hook (no-op om ingen .hook finns), sedan
+#    DB-snapshot om konfigurerad (no-op om ingen .cnf finns) - båda
+#    oberoende av varandra, båda blockerar pullen lika hårt vid fel.
 #    Om STOP_DURING_BACKUP=true stoppas containern - garanterat
 #    återstartad via trap nedan, oavsett hur resten av pull.sh går.
-"${SSH[@]}" "$HOST" "snapshot-db $NAME" || fail "snapshot-db failed"
+run_remote_optional "pre-snapshot" "pre-snapshot $NAME"
 trap '"${SSH[@]}" "$HOST" "restore-after-backup $NAME" || echo "VARNING: restore-after-backup misslyckades" >&2' EXIT
+run_remote "snapshot-db" "snapshot-db $NAME"
 
 # 2) rsync pull (read-only på källan via rrsync -ro)
 rsync -aH --delete --numeric-ids \

@@ -109,6 +109,44 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-check.timer nspawn-vault-prune.timer
 
 %changelog
+* Mon Aug 03 2026 Developer <dev@example.com> - 0.1.0-16
+- Adds an optional, generic pre-snapshot-command hook per container:
+  pull.sh now calls the source host's `pre-snapshot <name>` (new
+  dispatch.sh-whitelisted command, matching source-host/pre-snapshot.sh)
+  right before the existing `snapshot-db` MariaDB dump. Runs a single
+  operator-authored command inside the container via `systemd-run
+  --machine=`, from /etc/cockpit-nspawn/pull/<name>.hook - no-ops if that
+  file doesn't exist. Built for FreeIPA/postgres containers (`ipa-backup`,
+  `pg_dump`, etc.) that snapshot-db.sh's MariaDB-specific dump doesn't
+  cover, without teaching pull.sh anything about databases: the hook
+  command is entirely local config on the source host, same trust
+  boundary as snapshot-db.sh's own DB-credentials file - the vault never
+  sees or sends it, dispatch.sh still only ever runs one fixed script
+  name. The existing snapshot-db/MariaDB path is unchanged and stays
+  first-class, not replaced.
+- Both the hook and snapshot-db now block the pull on failure with the
+  *real* captured failure reason (new run_remote() helper in pull.sh,
+  replacing a bare `|| fail "snapshot-db failed"`) instead of a generic
+  canned string - e.g. "snapshot-db: mysqldump failed - is MariaDB
+  running and the credentials in ... correct?" shows up directly as
+  last_pull_msg. Blocking-on-failure and top-severity alerting both
+  already existed (a "failed" pull already outranks "stale" and already
+  triggers the loudest banner in nspawn-vault-web) - this was purely a
+  message-quality gap, not a missing alert path.
+- Fixes a latent JSON-injection bug in fail(): it interpolated its
+  message argument into a printf format string with no escaping at all.
+  Never hit before (every prior caller passed a static string), but
+  run_remote() now passes real captured command output, which can
+  contain '"' or a newline and would otherwise write invalid JSON to the
+  container's state file.
+- Backports write_status()/explicit error handling into
+  source-host/snapshot-db.sh (the canonical copy - see
+  source-host/README.md) from the nspawn-cockpit repo's own copy, which
+  had already drifted ahead with this improvement. See
+  nspawn-vault-web 0.1.0-34 for the matching per-container pull-log fix
+  that surfaces these new failure messages without the neighboring
+  container's log lines mixed in.
+
 * Thu Jul 30 2026 Developer <dev@example.com> - 0.1.0-15
 - Suppresses ransomware-suspected false positives caused by a real
   dnf/dnf-automatic package update, instead of just tolerating a bigger

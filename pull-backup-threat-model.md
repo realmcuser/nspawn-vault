@@ -147,6 +147,15 @@ rsync pull. No DB password ever leaves the source server.
 > instead. mysqldump is simpler and gives logical consistency for InnoDB -
 > start there, optimize if needed.
 
+Alongside this MariaDB-specific dump, `/usr/local/lib/nspawn-pull/pre-snapshot.sh`
+offers the same "run something inside the container before the pull, via
+`systemd-run --machine=`, password/command never leaves this host" shape
+generically, driven by an operator-authored command in
+`/etc/cockpit-nspawn/pull/<name>.hook` instead of a hardcoded `mysqldump`
+invocation - for services with their own backup tooling (`ipa-backup`,
+`pg_dump`, ...) that this section's approach doesn't cover. See
+`source-host/pre-snapshot.sh` and `example.hook`.
+
 ---
 
 ## 4. Vault side (trusted, does all the work)

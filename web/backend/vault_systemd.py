@@ -1,3 +1,4 @@
+import re
 import shlex
 import subprocess
 
@@ -98,7 +99,34 @@ def trigger_prune_now() -> None:
         raise RuntimeError(proc.stderr.strip() or "systemctl start nspawn-vault-prune.service failed")
 
 
-def fetch_pull_log(host: str, max_lines: int = 2000) -> str:
+# pull-host.sh prints "--- <name> ---" before pulling each container in a
+# host's run, and pull.sh itself prints "=== Pull <name> from <host> ==="
+# right after - either works as a block boundary, but "--- name ---" is
+# the one that's always present even when pull.sh dies before its own
+# first line (e.g. a bad $STATE_DIR). journalctl -o short-iso prefixes
+# every line with a timestamp/hostname/unit[pid], hence the leading ".*".
+_CONTAINER_MARKER = re.compile(r'^.*--- (\S+) ---\s*$', re.MULTILINE)
+
+
+def _slice_container_block(log: str, container: str) -> str:
+    """Cuts the shared per-host journal text down to just one container's
+    block - fetch_pull_log() otherwise returns the ENTIRE host's run
+    (every container pulled in that invocation), which is genuinely
+    confusing when read from the "view log" button on one specific
+    container (confirmed confusing Johan live, 2026-08-03: a failed
+    fhdcore-jf2 pull's log also showed samba-fhdcore-jf2's unrelated
+    lines). Falls back to the full log if the marker isn't found (e.g. an
+    older/already-rotated-out journal predating this slicing) rather than
+    returning nothing."""
+    for m in _CONTAINER_MARKER.finditer(log):
+        if m.group(1) == container:
+            next_m = _CONTAINER_MARKER.search(log, m.end())
+            end = next_m.start() if next_m else len(log)
+            return log[m.start():end].strip()
+    return log
+
+
+def fetch_pull_log(host: str, container: str | None = None, max_lines: int = 2000) -> str:
     """Journal for the MOST RECENT invocation of
     nspawn-vault-pull@<host>.service only - the systemd unit
     pull.sh/pull-host.sh's stdout+stderr is captured under (StandardOutput/
@@ -118,7 +146,9 @@ def fetch_pull_log(host: str, max_lines: int = 2000) -> str:
     line for the same reason.
 
     The unit is still shared across every container pulled from this host
-    in one run - unchanged from before, not something this fixes."""
+    in one run - pass `container` to slice the returned text down to just
+    that container's own block via _slice_container_block(); omit it (or
+    pass None) to get the raw, unsliced per-host text as before."""
     unit = f"nspawn-vault-pull@{host}.service"
     inv_id = subprocess.run(
         ["systemctl", "show", unit, "--property=InvocationID", "--value"],
@@ -133,4 +163,5 @@ def fetch_pull_log(host: str, max_lines: int = 2000) -> str:
         # fall back to this unit's own recent history rather than nothing.
         cmd += ["-u", unit, "-n", str(max_lines)]
     proc = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-    return proc.stdout or proc.stderr or ""
+    full = proc.stdout or proc.stderr or ""
+    return _slice_container_block(full, container) if container else full

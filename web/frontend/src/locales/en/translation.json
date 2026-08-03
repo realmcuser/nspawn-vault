@@ -41,6 +41,7 @@
     "viewLog": "View log",
     "logTitle": "Pull log: {{container}}",
     "logLastResult": "Last recorded result",
+    "logScopeHint": "Filtered to this container - the underlying run pulls every container on this host together, so an occasional unrelated line may still slip through.",
     "noLogAvailable": "No log data found for this pull (the journal may have already rotated it out).",
     "dbBackedUpHint": "Last successful pull included a database dump",
     "runNow": "Run now",

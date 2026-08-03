@@ -9,6 +9,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `zfs-bootstrap/` — `nspawn-vault-zfs-bootstrap.spec`: one script
   (`nspawn-vault-setup-zfs`), no dependencies. See "ZFS bootstrap chicken-and-egg"
   below for why this had to be split into its own package.
+- `source-host/` — not part of either RPM; the canonical copy of the three
+  scripts (`dispatch.sh`, `snapshot-db.sh`, `pre-snapshot.sh`,
+  `restore-after-backup.sh`) that run on the *source* host (the
+  nspawn-cockpit machine being backed up), manually installed per
+  `source-host/README.md`. `nspawn-cockpit`'s own `PULL-BACKUP-INTEGRATION.md`
+  describes vendoring these files *from* here for its (not yet built)
+  install-toggle — if that repo's vendored copy is ever hand-edited
+  directly instead, it will drift from this canonical copy (already
+  happened once, see `source-host/snapshot-db.sh`'s history).
 
 Two separate RPMs (`web` `Requires: nspawn-vault`), one shared repo — they're
 developed in lockstep, most features touch both sides at once. `zfs-bootstrap`

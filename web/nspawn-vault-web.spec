@@ -120,6 +120,22 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-web.service
 
 %changelog
+* Mon Aug 03 2026 Developer <dev@example.com> - 0.1.0-34
+- fetch_pull_log() (vault_systemd.py) now accepts a container name and
+  slices the returned journal text down to just that container's own
+  block, using the "--- <name> ---" markers pull-host.sh already prints
+  before each container in a host's pull run - falls back to the full
+  per-host text if the marker isn't found (older/rotated-out journal).
+  get_container_pull_log() (vault_routes.py) passes the container through
+  instead of dropping it. Fixes a real, previously-documented-but-not-
+  fixed limitation: the "view log" modal for one container was showing
+  the ENTIRE host's pull run, including every other container pulled in
+  the same invocation - confirmed confusing live (fhdcore-jf2's log also
+  showed unrelated samba-fhdcore-jf2 lines). HostDetail.jsx's log modal
+  gets a small caption noting the log is filtered, for the rare fallback
+  case. See nspawn-vault 0.1.0-16 for the new pre-snapshot hook whose
+  failure messages this makes actually readable without the noise.
+
 * Thu Jul 30 2026 Developer <dev@example.com> - 0.1.0-33
 - Host detail page shows a new calm, non-alarming hint on a container
   whose last pull had a large diff that was explained away by a real
