@@ -164,8 +164,9 @@ Build/test VM: AlmaLinux 10.2, `198.51.100.20` (root SSH). Caddy on `:80`
 (plain `http://`, no TLS — LAN-only, WAN access not required) reverse-proxies
 `/api/*` to uvicorn on `127.0.0.1:8000` and serves the built frontend directly.
 
-Production vault is still Ubuntu — migration to this AlmaLinux stack is
-in progress, not yet cut over.
+Production vault (`nspawn-vault.vpn.fhd.se`) has been cut over to this
+AlmaLinux 10.2 stack (confirmed live 2026-08-03) — the old Ubuntu VM is
+no longer in use.
 
 ## Critical gotchas (already hit once each — don't repeat)
 
