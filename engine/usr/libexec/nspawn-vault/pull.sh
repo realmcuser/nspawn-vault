@@ -113,11 +113,23 @@ trap '"${SSH[@]}" "$HOST" "restore-after-backup $NAME" || echo "VARNING: restore
 run_remote "snapshot-db" "snapshot-db $NAME"
 
 # 2) rsync pull (read-only på källan via rrsync -ro)
+rsync_rc=0
 rsync -aH --delete --numeric-ids \
     "${RSYNC_EXCLUDES[@]}" \
     -e "${SSH[*]}" \
-    "$HOST:/$NAME/" "$MNT/" \
-    || fail "rsync pull failed"
+    "$HOST:/$NAME/" "$MNT/" || rsync_rc=$?
+# Exit 24 ("partial transfer due to vanished source files") means rsync
+# raced against the container deleting/replacing one of its own files
+# mid-sync - normal on an actively-running container (seen live on
+# hermes-agent: .hermes/cache/scratch/*.sh, kanban.db-shm/-wal), not a real
+# backup failure. Treating it as fatal made check-stale.sh's dead-man's
+# switch fire immediately on a benign race that the very next pull resolves
+# on its own.
+if [ "$rsync_rc" -ne 0 ] && [ "$rsync_rc" -ne 24 ]; then
+    fail "rsync pull failed (exit $rsync_rc)"
+elif [ "$rsync_rc" -eq 24 ]; then
+    echo "VARNING: rsync avslutade med kod 24 (filer försvann under överföringen - normalt på en aktiv container) - fortsätter pullen" >&2
+fi
 
 # 3) Atomär ZFS-snapshot
 SNAP="${DATASET}@$(date +%Y%m%d-%H%M%S)"

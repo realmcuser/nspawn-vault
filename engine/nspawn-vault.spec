@@ -109,6 +109,19 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-check.timer nspawn-vault-prune.timer
 
 %changelog
+* Sat Oct 03 2026 Developer <dev@example.com> - 0.1.0-17
+- pull.sh no longer treats rsync exit code 24 ("partial transfer due to
+  vanished source files") as a hard pull failure. Found live on
+  besten.alsike.minten.se's hermes-agent container: an actively-running
+  process there constantly rewrites/deletes its own scratch files and a
+  SQLite WAL/SHM pair, which occasionally vanish mid-rsync - a benign race
+  on any busy container, not a real backup problem, but it was logging a
+  "failed" pull and tripping check-stale.sh's dead-man's-switch alert
+  immediately (14 false ALERTs in 30 days for this one container, 0 for
+  its neighbor fhdslackbot on the same host). Exit 24 now just logs a
+  warning and the pull proceeds to the zfs snapshot as normal; every other
+  nonzero rsync exit code still fails the pull exactly as before.
+
 * Mon Aug 03 2026 Developer <dev@example.com> - 0.1.0-16
 - Adds an optional, generic pre-snapshot-command hook per container:
   pull.sh now calls the source host's `pre-snapshot <name>` (new
