@@ -109,6 +109,26 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-check.timer nspawn-vault-prune.timer
 
 %changelog
+* Sun Oct 04 2026 Developer <dev@example.com> - 0.1.0-20
+- Restores Linux file capabilities (setcap) lost by the pull's plain
+  rsync -a, without rsync -X (reverted in 0.1.0-19 - broke every pull
+  under SELinux Enforcing, see that entry). New source-host command
+  `list-capabilities <name>` (source-host/list-capabilities.sh,
+  dispatch.sh-whitelisted) runs `getcap -r` inside the container, scoped
+  to conventional system binary dirs (confirmed ~125x faster than a
+  full-tree scan, same result on a real container). pull.sh's new step
+  2b calls it after the rsync, then runs `setcap` locally on the vault
+  for each reported file - path-validated against the dataset's own
+  mountpoint first, same defensive pattern as the web UI's file-browser
+  path safety. Confirmed live that `setcap` needs no SELinux privilege
+  the pull service's domain (unconfined_service_t) doesn't already have,
+  unlike the reverted -X approach. Graceful-degradation on a source host
+  whose dispatch.sh doesn't recognize the new command yet, matching the
+  existing pre-snapshot-hook rollout pattern.
+- Does not retroactively fix snapshots taken before this change -
+  pull-backup-threat-model.md's restore section documents the `rpm -a
+  --setcaps` recovery option for those, as before.
+
 * Sun Oct 04 2026 Developer <dev@example.com> - 0.1.0-19
 - Reverts the -X rsync flag added in 0.1.0-18. Caused a fleet-wide outage
   within minutes of deploying: with SELinux Enforcing on the vault (the

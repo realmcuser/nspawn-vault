@@ -1,6 +1,6 @@
 # Source-host scripts (draft)
 
-These three scripts implement the *source-host* side of the pull-backup
+These scripts implement the *source-host* side of the pull-backup
 design in `../pull-backup-threat-model.md` (section 3). They do **not**
 belong to either RPM in this repo (`nspawn-vault` / `nspawn-vault-web`) -
 they run on the customer/nspawn-cockpit host being backed up, not on the
@@ -14,10 +14,10 @@ section 7), not built yet.
 ## What each file does
 
 - **`dispatch.sh`** - the forced SSH command itself. Whitelists exactly
-  `pre-snapshot <name>`, `snapshot-db <name>`, `restore-after-backup <name>`,
-  and a read-only rsync of one container's live tree under
-  `/var/lib/machines/<name>/`. This is the actual access-control boundary -
-  read it before changing anything else here.
+  `pre-snapshot <name>`, `snapshot-db <name>`, `list-capabilities <name>`,
+  `restore-after-backup <name>`, and a read-only rsync of one container's
+  live tree under `/var/lib/machines/<name>/`. This is the actual
+  access-control boundary - read it before changing anything else here.
 - **`pre-snapshot.sh`** - optional, generic pre-snapshot hook: runs one
   operator-defined command *inside* the container via `systemd-run
   --machine=` right before the pull, for services with their own backup
@@ -29,6 +29,13 @@ section 7), not built yet.
   password never has to leave this host. No-ops if the container has no DB
   credentials file configured (see `example.cnf`) - that's a normal case,
   not an error.
+- **`list-capabilities.sh`** - lists Linux file capabilities (`setcap`)
+  under the container's conventional system binary directories, so the
+  vault can reapply them locally after its own rsync pull (which doesn't
+  preserve them - see `pull-backup-threat-model.md`'s capabilities section
+  for why `rsync -X` can't be used for this instead). Read-only, no-ops
+  (produces no output) if the container has no capability-bearing files -
+  that's a normal case, not an error.
 - **`restore-after-backup.sh`** - cleanup, always run by the vault's
   `pull.sh` after the pull whether it succeeded or failed. Removes the
   temporary DB dump `snapshot-db.sh` left inside the container.
@@ -41,10 +48,11 @@ On the source host, as root:
 
 ```bash
 mkdir -p /usr/local/lib/nspawn-pull
-cp dispatch.sh pre-snapshot.sh snapshot-db.sh restore-after-backup.sh /usr/local/lib/nspawn-pull/
+cp dispatch.sh pre-snapshot.sh snapshot-db.sh list-capabilities.sh restore-after-backup.sh /usr/local/lib/nspawn-pull/
 chmod 755 /usr/local/lib/nspawn-pull/dispatch.sh \
           /usr/local/lib/nspawn-pull/pre-snapshot.sh \
           /usr/local/lib/nspawn-pull/snapshot-db.sh \
+          /usr/local/lib/nspawn-pull/list-capabilities.sh \
           /usr/local/lib/nspawn-pull/restore-after-backup.sh
 
 # Trust the vault's key, forced through dispatch.sh - replace with the

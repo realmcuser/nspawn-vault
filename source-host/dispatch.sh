@@ -13,10 +13,10 @@
 # ../pull-backup-threat-model.md section 3 for the design this implements,
 # and treat any change here as security-sensitive.
 #
-# Whitelists exactly four things, matching engine/pull.sh on the vault
+# Whitelists exactly five things, matching engine/pull.sh on the vault
 # side: `pre-snapshot <name>`, `snapshot-db <name>`,
-# `restore-after-backup <name>`, and a read-only rsync of exactly one
-# container's live tree.
+# `list-capabilities <name>`, `restore-after-backup <name>`, and a
+# read-only rsync of exactly one container's live tree.
 
 set -euo pipefail
 
@@ -39,6 +39,11 @@ case "$cmd" in
         name="${cmd#snapshot-db }"
         [[ "$name" =~ $NAME_RE ]] || { echo "dispatch.sh: rejected container name: '$name'" >&2; exit 1; }
         exec "$BIN_DIR/snapshot-db.sh" "$name"
+        ;;
+    "list-capabilities "*)
+        name="${cmd#list-capabilities }"
+        [[ "$name" =~ $NAME_RE ]] || { echo "dispatch.sh: rejected container name: '$name'" >&2; exit 1; }
+        exec "$BIN_DIR/list-capabilities.sh" "$name"
         ;;
     "restore-after-backup "*)
         name="${cmd#restore-after-backup }"

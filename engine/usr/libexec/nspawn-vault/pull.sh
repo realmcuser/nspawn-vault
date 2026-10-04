@@ -115,16 +115,17 @@ run_remote "snapshot-db" "snapshot-db $NAME"
 # 2) rsync pull (read-only på källan via rrsync -ro)
 # Plain -a (-rlptgoD) drops extended attributes, including Linux file
 # capabilities (security.capability, what `setcap` sets) - a setcap'd
-# binary silently loses that capability on every pull. -X fixes that, but
-# was tried and reverted live on 2026-10-04: with SELinux Enforcing on the
-# vault (confirmed via `getenforce`), -X also tries to sync
-# security.selinux, which root here cannot write without CAP_MAC_ADMIN -
-# broke EVERY pull with "lremovexattr(...): Permission denied" within
-# minutes of deploying. Re-adding -X needs a filter rule that preserves
-# security.capability while excluding security.selinux specifically
-# (rsync's xattr-targeted filter syntax, untested as of this revert) -
-# don't just re-add bare -X without that, and verify against a real
-# Enforcing-SELinux pull before shipping again.
+# binary silently loses that capability on every pull. -X would fix that
+# but was tried and reverted live on 2026-10-04: with SELinux Enforcing on
+# the vault, -X also tries to sync security.selinux, which this process
+# (SELinux domain unconfined_service_t) cannot write without
+# CAP_MAC_ADMIN - broke EVERY pull with "lremovexattr(...): Permission
+# denied" within minutes of deploying, confirmed reproducible in testing
+# (filtering security.selinux out of the xattr set does NOT avoid this -
+# rsync's own xattr-comparison still trips the same permission check).
+# Capabilities are instead restored separately, below (step 2b), via
+# list-capabilities/setcap - narrower, and confirmed live to need no
+# SELinux privilege at all.
 rsync_rc=0
 rsync -aH --delete --numeric-ids \
     "${RSYNC_EXCLUDES[@]}" \
@@ -142,6 +143,39 @@ if [ "$rsync_rc" -ne 0 ] && [ "$rsync_rc" -ne 24 ]; then
 elif [ "$rsync_rc" -eq 24 ]; then
     echo "VARNING: rsync avslutade med kod 24 (filer försvann under överföringen - normalt på en aktiv container) - fortsätter pullen" >&2
 fi
+
+# 2b) Återställ Linux file capabilities (setcap) som rsync -a ovan tappade -
+# se kommentaren på rsync-anropet för varför -X inte används. Best-effort:
+# ingen output alls (container utan capability-filer) och en källhost som
+# inte känner igen kommandot än (gammal dispatch.sh) är båda normala fall,
+# inte ett pull-fel - skiljer sig därför från run_remote/run_remote_optional
+# genom att faktiskt behöva den riktiga stdout-utdatan, inte bara
+# fel/success.
+caps_out=$("${SSH[@]}" "$HOST" "list-capabilities $NAME" 2>&1) || caps_out=""
+if [[ "$caps_out" == *"dispatch.sh: rejected command"* ]]; then
+    echo "VARNING: $HOST känner inte igen 'list-capabilities' än (source-host/dispatch.sh behöver uppdateras där) - hoppar över capability-återställning för denna pull" >&2
+    caps_out=""
+fi
+caps_applied=0
+while IFS=' ' read -r cap_path cap_value; do
+    [ -n "$cap_path" ] && [ -n "$cap_value" ] || continue
+    # cap_path kommer från containerns egen sökvägsrymd (t.ex. /usr/bin/foo)
+    # - lös den mot $MNT och vägra följa den utanför, samma försiktighet som
+    # web/backend/vault_archive.py:s resolve_safe_path tillämpar på
+    # motsvarande problem för filbläddraren.
+    resolved=$(realpath -m "$MNT$cap_path" 2>/dev/null) || continue
+    case "$resolved" in
+        "$MNT"/*) ;;
+        *) echo "VARNING: ignorerar capability-sökväg utanför containerns rot: $cap_path" >&2; continue ;;
+    esac
+    [ -f "$resolved" ] || continue
+    if setcap "$cap_value" "$resolved" 2>/dev/null; then
+        caps_applied=$((caps_applied + 1))
+    else
+        echo "VARNING: kunde inte sätta capability '$cap_value' på $cap_path" >&2
+    fi
+done <<< "$caps_out"
+[ "$caps_applied" -gt 0 ] && echo "Återställde $caps_applied capability-fil(er)" >&2
 
 # 3) Atomär ZFS-snapshot
 SNAP="${DATASET}@$(date +%Y%m%d-%H%M%S)"

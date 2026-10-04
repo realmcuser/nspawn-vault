@@ -289,40 +289,55 @@ systemd-run --machine="$NAME" --wait -- \
     bash -c 'mysql < /var/tmp/cockpit-nspawn-db.sql'
 ```
 
-**Known gap: Linux file capabilities (`setcap`) are not preserved by any
-pull or restore here.** Plain `rsync -a` (`-rlptgoD`) does not preserve
-extended attributes, and a file's capabilities (`security.capability`,
-what `setcap` sets) are stored as one - so a setcap'd binary (e.g. one
-using a capability instead of running fully as setuid root) silently
-loses that capability on every pull, with no error anywhere.
+**Linux file capabilities (`setcap`) need a separate step - not
+`rsync -X`.** Plain `rsync -a` (`-rlptgoD`) does not preserve extended
+attributes, and a file's capabilities (`security.capability`, what
+`setcap` sets) are stored as one - so a setcap'd binary (e.g. one using a
+capability instead of running fully as setuid root) would otherwise
+silently lose that capability on every pull, with no error anywhere.
 
 The obvious fix (`-X`/`--xattrs`) was tried live on the vault
 (2026-10-04) and **reverted within minutes**: with SELinux in Enforcing
-mode on the vault (the normal case), `-X` also tries to sync
-`security.selinux`, which root cannot write without `CAP_MAC_ADMIN` -
-every single pull across the whole fleet immediately failed with
-`lremovexattr(...): Permission denied`. A real fix needs a filter rule
-that keeps `security.capability` while excluding `security.selinux`
-specifically (rsync supports xattr-targeted filter rules for this), not
-yet implemented or tested as of this revert - **do not re-add a bare
-`-X`/`--xattrs` to either the pull or this restore recipe** without that
-filter and a real test against an Enforcing-SELinux source, or the same
-fleet-wide outage will repeat.
+mode on the vault (the normal case; the pull service runs under the
+`unconfined_service_t` domain), `-X` also tries to sync
+`security.selinux`, which that domain cannot write without
+`CAP_MAC_ADMIN` - every single pull across the whole fleet immediately
+failed with `lremovexattr(...): Permission denied`. Confirmed by direct
+testing that an xattr-filter rule excluding just `security.selinux`
+does **not** avoid this either - rsync's own generator-side comparison
+still needs to inspect it when `-X` is active at all, and that's what
+trips the permission check regardless of what gets filtered out of the
+actual copy set. **Do not re-add `-X`/`--xattrs` to the pull or to this
+restore recipe** - it cannot be made to work this way.
 
-Until that's built, a restored container with a capability-using binary
-may behave differently than before the restore. For an RPM-packaged
-binary, the capability can usually be re-derived from the package
-database itself rather than from the backup, since RPM records each
-file's intended capabilities as package metadata:
+**The actual fix**: capabilities are restored as an independent step, not
+via rsync at all. After the plain `rsync -aH` pull, the vault asks the
+source host (new `list-capabilities <name>` dispatch.sh command) for
+every capability-bearing file under the container's conventional system
+binary directories (`getcap -r`, restricted in scope - setcap'd files are
+essentially always there in practice, and scanning just those directories
+is confirmed ~125x faster than a full-tree scan for the same result), then
+calls `setcap` locally on the vault for each one. This works with no
+SELinux complication at all - `security.capability` is a completely
+different xattr from `security.selinux`, governed by a different, much
+narrower permission that the pull service's domain already has (confirmed
+live). See `source-host/list-capabilities.sh` and `pull.sh`'s "2b" step.
+
+This only covers pulls taken after this feature shipped - a snapshot from
+before it existed never captured capability data in the first place, and
+rolling it back the normal way above won't bring it back retroactively.
+For an RPM-packaged binary, the capability can usually be re-derived from
+the package database itself instead:
 
 ```bash
 systemd-nspawn -D "$MNT" --private-network -- rpm -a --setcaps
 ```
 
-Run this once, before starting the restored container. It only fixes
-files whose capability was set by the RPM that owns them - a capability
-applied manually after install (an admin running `setcap` by hand,
-untracked by any package) has no record to recover from and stays lost.
+Run this once, before starting the restored container, for any snapshot
+taken before `list-capabilities` existed. It only fixes files whose
+capability was set by the RPM that owns them - a capability applied
+manually after install (an admin running `setcap` by hand, untracked by
+any package) has no record to recover from and stays lost either way.
 
 Measure and document RTO per source - a backup whose restore has never
 been tested is just a hypothesis.
