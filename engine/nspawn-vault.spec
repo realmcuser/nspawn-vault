@@ -109,6 +109,18 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-check.timer nspawn-vault-prune.timer
 
 %changelog
+* Sun Oct 04 2026 Developer <dev@example.com> - 0.1.0-21
+- Fixes a bug in 0.1.0-20's new step 2b, caught by a live test pull
+  immediately after deploying it: `caps_out=$(...) || caps_out=""`
+  cleared the captured list-capabilities output on ANY non-zero SSH exit
+  (including the expected "source host not upgraded yet" case) before the
+  very next line could check it for that case - silently skipped both the
+  warning message and, harmlessly, the capability restoration itself,
+  with no visible sign of why. `|| true` instead of `|| caps_out=""`
+  prevents `set -e` from aborting without clobbering the output. No
+  incorrect setcap calls or false "success" reporting resulted either
+  way - purely a lost diagnostic, not a correctness bug.
+
 * Sun Oct 04 2026 Developer <dev@example.com> - 0.1.0-20
 - Restores Linux file capabilities (setcap) lost by the pull's plain
   rsync -a, without rsync -X (reverted in 0.1.0-19 - broke every pull

@@ -151,7 +151,7 @@ fi
 # inte ett pull-fel - skiljer sig därför från run_remote/run_remote_optional
 # genom att faktiskt behöva den riktiga stdout-utdatan, inte bara
 # fel/success.
-caps_out=$("${SSH[@]}" "$HOST" "list-capabilities $NAME" 2>&1) || caps_out=""
+caps_out=$("${SSH[@]}" "$HOST" "list-capabilities $NAME" 2>&1) || true
 if [[ "$caps_out" == *"dispatch.sh: rejected command"* ]]; then
     echo "VARNING: $HOST känner inte igen 'list-capabilities' än (source-host/dispatch.sh behöver uppdateras där) - hoppar över capability-återställning för denna pull" >&2
     caps_out=""
