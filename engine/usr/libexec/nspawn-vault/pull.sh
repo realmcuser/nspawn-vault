@@ -159,6 +159,11 @@ fi
 caps_applied=0
 while IFS=' ' read -r cap_path cap_value; do
     [ -n "$cap_path" ] && [ -n "$cap_value" ] || continue
+    # Tyst hoppa över allt som inte är en absolut sökväg - list-capabilities.sh:s
+    # egen "scan complete"-statusrad (och dispatch.sh:s avvisningstext, om den
+    # skulle undgå kollen ovan) hamnar i samma 2>&1-ström men är ingen riktig
+    # capability-rad; en getcap-rad är alltid "/absolut/sökväg caps=flags".
+    [[ "$cap_path" == /* ]] || continue
     # cap_path kommer från containerns egen sökvägsrymd (t.ex. /usr/bin/foo)
     # - lös den mot $MNT och vägra följa den utanför, samma försiktighet som
     # web/backend/vault_archive.py:s resolve_safe_path tillämpar på

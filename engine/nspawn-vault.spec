@@ -109,6 +109,22 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-check.timer nspawn-vault-prune.timer
 
 %changelog
+* Sun Oct 04 2026 Developer <dev@example.com> - 0.1.0-22
+- Fixes cosmetic log noise in step 2b, caught by the first real end-to-end
+  test against an upgraded source host: list-capabilities.sh's own
+  "scan complete" stderr status line (and dispatch.sh's rejection text, in
+  principle) rides along in the same captured 2>&1 stream as the real
+  getcap output, and the parsing loop tried to treat it as a capability
+  line too, producing a harmless but confusing "ignorerar
+  capability-sökväg utanför containerns rot" warning on every pull. Now
+  silently skips any line that isn't an absolute path before the
+  real-path-safety check, since a genuine getcap line always starts with
+  "/" and nothing else does. Fully verified live end to end this time:
+  installed the updated dispatch.sh/list-capabilities.sh on a real source
+  host, confirmed `getcap` on the vault's pulled copy now matches the
+  source exactly (cap_net_bind_service,cap_net_admin,cap_sys_nice=ep on
+  gst-ptp-helper), with no stray warnings.
+
 * Sun Oct 04 2026 Developer <dev@example.com> - 0.1.0-21
 - Fixes a bug in 0.1.0-20's new step 2b, caught by a live test pull
   immediately after deploying it: `caps_out=$(...) || caps_out=""`
