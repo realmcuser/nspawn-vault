@@ -109,6 +109,21 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-check.timer nspawn-vault-prune.timer
 
 %changelog
+* Sun Oct 04 2026 Developer <dev@example.com> - 0.1.0-18
+- pull.sh's rsync pull now uses -X (preserve extended attributes) in
+  addition to the existing -aH. Plain -a (-rlptgoD) silently drops Linux
+  file capabilities (security.capability, what `setcap` sets) since
+  they're stored as an xattr - any setcap'd binary in a pulled container
+  lost that capability on every single pull, with no error or warning.
+  Does not retroactively fix snapshots taken before this change; see the
+  new recovery note in pull-backup-threat-model.md section 6 (run `rpm -a
+  --setcaps` inside the restored tree via systemd-nspawn before starting
+  it, for RPM-packaged binaries - a manually setcap'd file has no package
+  record to recover from and is lost for good on a pre-fix snapshot).
+- Documents this same gap and the rpm --setcaps workaround in the
+  threat-model doc's restore recipe, which had the identical missing -X
+  in its own example rsync command.
+
 * Sat Oct 03 2026 Developer <dev@example.com> - 0.1.0-17
 - pull.sh no longer treats rsync exit code 24 ("partial transfer due to
   vanished source files") as a hard pull failure. Found live on

@@ -281,13 +281,39 @@ zfs rollback "${DATASET}@<snapshot>"          # or mount .zfs/snapshot/<x> read-
 
 # 2) Rsync back to the source (restore path, not the backup key)
 machinectl stop "$NAME" 2>/dev/null || true
-rsync -aH --delete "$MNT/" "source:/var/lib/machines/$NAME/"
+rsync -aHX --delete "$MNT/" "source:/var/lib/machines/$NAME/"
 
 # 3) Start it and import the DB dump from inside
 machinectl start "$NAME"
 systemd-run --machine="$NAME" --wait -- \
     bash -c 'mysql < /var/tmp/cockpit-nspawn-db.sql'
 ```
+
+**Linux file capabilities (`setcap`) and snapshots taken before `-X`
+was added to `pull.sh`'s rsync:** plain `rsync -a` (`-rlptgoD`) does not
+preserve extended attributes, and a file's capabilities
+(`security.capability`, what `setcap` sets) are stored as one. `pull.sh`
+only gained `-X` as of the pull-engine release that fixed this (see its
+changelog) - any snapshot taken *before* that already lost this
+information on the way into the vault, and rolling it back the normal way
+above will not bring capabilities back, silently. If a restored container
+has a binary that relies on a capability instead of setuid root (common
+for things like `ping`, or custom daemons set up that way) and it stops
+behaving as expected after a restore, that's almost certainly why.
+
+For an RPM-packaged binary, capabilities can usually be re-derived from
+the package database itself rather than from the backup, since RPM
+records each file's intended capabilities as package metadata:
+
+```bash
+systemd-nspawn -D "$MNT" --private-network -- rpm -a --setcaps
+```
+
+Run this once, before starting the restored container. It only fixes
+files whose capability was set by the RPM that owns them - a capability
+applied manually after install (an admin running `setcap` by hand,
+untracked by any package) has no record to recover from and is lost for
+good if the snapshot predates the `-X` fix.
 
 Measure and document RTO per source - a backup whose restore has never
 been tested is just a hypothesis.

@@ -113,8 +113,17 @@ trap '"${SSH[@]}" "$HOST" "restore-after-backup $NAME" || echo "VARNING: restore
 run_remote "snapshot-db" "snapshot-db $NAME"
 
 # 2) rsync pull (read-only på källan via rrsync -ro)
+# -X (xattrs) is required to preserve Linux file capabilities
+# (security.capability, what `setcap` sets) - plain `-a` is `-rlptgoD` and
+# silently drops them. Without this, any setcap'd binary in the container
+# (e.g. one using capabilities instead of setuid root) loses that
+# capability on every pull, invisibly - no error, no warning, just a
+# binary that no longer works the same way after a restore. Does NOT
+# retroactively fix snapshots taken before this flag was added - see
+# pull-backup-threat-model.md section 6 for the rpm-based recovery option
+# for existing backups.
 rsync_rc=0
-rsync -aH --delete --numeric-ids \
+rsync -aHX --delete --numeric-ids \
     "${RSYNC_EXCLUDES[@]}" \
     -e "${SSH[*]}" \
     "$HOST:/$NAME/" "$MNT/" || rsync_rc=$?
