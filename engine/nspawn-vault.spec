@@ -109,6 +109,20 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-check.timer nspawn-vault-prune.timer
 
 %changelog
+* Sun Oct 04 2026 Developer <dev@example.com> - 0.1.0-19
+- Reverts the -X rsync flag added in 0.1.0-18. Caused a fleet-wide outage
+  within minutes of deploying: with SELinux Enforcing on the vault (the
+  normal case), -X also tries to sync security.selinux, which root cannot
+  write without CAP_MAC_ADMIN - every pull failed with
+  "lremovexattr(...): Permission denied". Caught live by a manual test
+  pull run immediately after deploying, before the next scheduled pull
+  wave would have hit all configured source hosts.
+- The underlying problem (plain `rsync -a` still drops Linux file
+  capabilities/security.capability) is unfixed and back to its prior
+  state - pull-backup-threat-model.md's restore section now documents
+  this explicitly, including why a bare -X can't just be re-added without
+  a filter rule that excludes security.selinux specifically.
+
 * Sun Oct 04 2026 Developer <dev@example.com> - 0.1.0-18
 - pull.sh's rsync pull now uses -X (preserve extended attributes) in
   addition to the existing -aH. Plain -a (-rlptgoD) silently drops Linux

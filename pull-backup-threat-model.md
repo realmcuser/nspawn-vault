@@ -281,7 +281,7 @@ zfs rollback "${DATASET}@<snapshot>"          # or mount .zfs/snapshot/<x> read-
 
 # 2) Rsync back to the source (restore path, not the backup key)
 machinectl stop "$NAME" 2>/dev/null || true
-rsync -aHX --delete "$MNT/" "source:/var/lib/machines/$NAME/"
+rsync -aH --delete "$MNT/" "source:/var/lib/machines/$NAME/"
 
 # 3) Start it and import the DB dump from inside
 machinectl start "$NAME"
@@ -289,21 +289,31 @@ systemd-run --machine="$NAME" --wait -- \
     bash -c 'mysql < /var/tmp/cockpit-nspawn-db.sql'
 ```
 
-**Linux file capabilities (`setcap`) and snapshots taken before `-X`
-was added to `pull.sh`'s rsync:** plain `rsync -a` (`-rlptgoD`) does not
-preserve extended attributes, and a file's capabilities
-(`security.capability`, what `setcap` sets) are stored as one. `pull.sh`
-only gained `-X` as of the pull-engine release that fixed this (see its
-changelog) - any snapshot taken *before* that already lost this
-information on the way into the vault, and rolling it back the normal way
-above will not bring capabilities back, silently. If a restored container
-has a binary that relies on a capability instead of setuid root (common
-for things like `ping`, or custom daemons set up that way) and it stops
-behaving as expected after a restore, that's almost certainly why.
+**Known gap: Linux file capabilities (`setcap`) are not preserved by any
+pull or restore here.** Plain `rsync -a` (`-rlptgoD`) does not preserve
+extended attributes, and a file's capabilities (`security.capability`,
+what `setcap` sets) are stored as one - so a setcap'd binary (e.g. one
+using a capability instead of running fully as setuid root) silently
+loses that capability on every pull, with no error anywhere.
 
-For an RPM-packaged binary, capabilities can usually be re-derived from
-the package database itself rather than from the backup, since RPM
-records each file's intended capabilities as package metadata:
+The obvious fix (`-X`/`--xattrs`) was tried live on the vault
+(2026-10-04) and **reverted within minutes**: with SELinux in Enforcing
+mode on the vault (the normal case), `-X` also tries to sync
+`security.selinux`, which root cannot write without `CAP_MAC_ADMIN` -
+every single pull across the whole fleet immediately failed with
+`lremovexattr(...): Permission denied`. A real fix needs a filter rule
+that keeps `security.capability` while excluding `security.selinux`
+specifically (rsync supports xattr-targeted filter rules for this), not
+yet implemented or tested as of this revert - **do not re-add a bare
+`-X`/`--xattrs` to either the pull or this restore recipe** without that
+filter and a real test against an Enforcing-SELinux source, or the same
+fleet-wide outage will repeat.
+
+Until that's built, a restored container with a capability-using binary
+may behave differently than before the restore. For an RPM-packaged
+binary, the capability can usually be re-derived from the package
+database itself rather than from the backup, since RPM records each
+file's intended capabilities as package metadata:
 
 ```bash
 systemd-nspawn -D "$MNT" --private-network -- rpm -a --setcaps
@@ -312,8 +322,7 @@ systemd-nspawn -D "$MNT" --private-network -- rpm -a --setcaps
 Run this once, before starting the restored container. It only fixes
 files whose capability was set by the RPM that owns them - a capability
 applied manually after install (an admin running `setcap` by hand,
-untracked by any package) has no record to recover from and is lost for
-good if the snapshot predates the `-X` fix.
+untracked by any package) has no record to recover from and stays lost.
 
 Measure and document RTO per source - a backup whose restore has never
 been tested is just a hypothesis.

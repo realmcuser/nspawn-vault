@@ -113,17 +113,20 @@ trap '"${SSH[@]}" "$HOST" "restore-after-backup $NAME" || echo "VARNING: restore
 run_remote "snapshot-db" "snapshot-db $NAME"
 
 # 2) rsync pull (read-only på källan via rrsync -ro)
-# -X (xattrs) is required to preserve Linux file capabilities
-# (security.capability, what `setcap` sets) - plain `-a` is `-rlptgoD` and
-# silently drops them. Without this, any setcap'd binary in the container
-# (e.g. one using capabilities instead of setuid root) loses that
-# capability on every pull, invisibly - no error, no warning, just a
-# binary that no longer works the same way after a restore. Does NOT
-# retroactively fix snapshots taken before this flag was added - see
-# pull-backup-threat-model.md section 6 for the rpm-based recovery option
-# for existing backups.
+# Plain -a (-rlptgoD) drops extended attributes, including Linux file
+# capabilities (security.capability, what `setcap` sets) - a setcap'd
+# binary silently loses that capability on every pull. -X fixes that, but
+# was tried and reverted live on 2026-10-04: with SELinux Enforcing on the
+# vault (confirmed via `getenforce`), -X also tries to sync
+# security.selinux, which root here cannot write without CAP_MAC_ADMIN -
+# broke EVERY pull with "lremovexattr(...): Permission denied" within
+# minutes of deploying. Re-adding -X needs a filter rule that preserves
+# security.capability while excluding security.selinux specifically
+# (rsync's xattr-targeted filter syntax, untested as of this revert) -
+# don't just re-add bare -X without that, and verify against a real
+# Enforcing-SELinux pull before shipping again.
 rsync_rc=0
-rsync -aHX --delete --numeric-ids \
+rsync -aH --delete --numeric-ids \
     "${RSYNC_EXCLUDES[@]}" \
     -e "${SSH[*]}" \
     "$HOST:/$NAME/" "$MNT/" || rsync_rc=$?
