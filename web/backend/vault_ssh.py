@@ -5,17 +5,36 @@ SSH_KEY = "/root/.ssh/nspawn-vault"
 SSH_PUBLIC_KEY = Path(f"{SSH_KEY}.pub")
 CONNECT_TIMEOUT = 10
 
+# Matches source-host/README.md's install path exactly - this is what the
+# forced-command authorized_keys line restricts the vault's key to.
+DISPATCH_SCRIPT_PATH = "/usr/local/lib/nspawn-pull/dispatch.sh"
+
 
 def get_public_key() -> dict:
     """The vault's own public SSH key - not a secret (that's the whole point
     of public-key crypto; only the private half at SSH_KEY needs protecting),
-    so this is safe to expose to any admin. Needed on every source host's
-    authorized_keys line (see source-host/README.md) - this exists so an
-    admin can copy it straight from the UI instead of SSHing into the vault
-    to `cat` the file by hand."""
+    so this is safe to expose to any admin.
+
+    Returns two forms, for two different real paste targets:
+    - "key": the bare public key, for cockpit-nspawn's own "Enable pull
+      backup" toggle (nspawn-cockpit's PULL-BACKUP-INTEGRATION.md), which
+      constructs the authorized_keys line itself - pasting the already-
+      wrapped line into that field would double-wrap it.
+    - "authorized_keys_line": the full, pre-built line
+      (restrict,command="..." + the key), for directly editing a source
+      host's /root/.ssh/authorized_keys by hand when the toggle isn't
+      used. Handing out just the bare key for this path is exactly what
+      led to a source host with a fully unrestricted root login for the
+      vault's key instead of the intended dispatch.sh-only access - found
+      live 2026-10-08 on a manually-onboarded host (ljan9.vpn.fhd.se)."""
     if not SSH_PUBLIC_KEY.is_file():
-        return {"exists": False, "key": None}
-    return {"exists": True, "key": SSH_PUBLIC_KEY.read_text().strip()}
+        return {"exists": False, "key": None, "authorized_keys_line": None}
+    key = SSH_PUBLIC_KEY.read_text().strip()
+    return {
+        "exists": True,
+        "key": key,
+        "authorized_keys_line": f'restrict,command="{DISPATCH_SCRIPT_PATH}" {key}',
+    }
 
 
 def test_connection(host: str) -> dict:

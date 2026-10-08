@@ -77,8 +77,9 @@ const Admin = () => {
   const [hostTestResults, setHostTestResults] = useState({});
   const [testingNewHost, setTestingNewHost] = useState(false);
   const [newHostTestResult, setNewHostTestResult] = useState(null);
-  const [vaultKey, setVaultKey] = useState({ exists: false, key: null });
+  const [vaultKey, setVaultKey] = useState({ exists: false, key: null, authorized_keys_line: null });
   const [keyCopied, setKeyCopied] = useState(false);
+  const [authKeysLineCopied, setAuthKeysLineCopied] = useState(false);
   const [auditLog, setAuditLog] = useState(null); // { entries, total, offset, limit }
   const [auditLogError, setAuditLogError] = useState(null);
 
@@ -348,6 +349,13 @@ const Admin = () => {
     setTimeout(() => setKeyCopied(false), 2000);
   };
 
+  const handleCopyAuthKeysLine = async () => {
+    if (!vaultKey.authorized_keys_line) return;
+    await navigator.clipboard.writeText(vaultKey.authorized_keys_line);
+    setAuthKeysLineCopied(true);
+    setTimeout(() => setAuthKeysLineCopied(false), 2000);
+  };
+
   const handleTestHostConnection = async (host) => {
     setTestingHost(host);
     setHostTestResults((prev) => ({ ...prev, [host]: null }));
@@ -521,20 +529,38 @@ const Admin = () => {
             <KeyRound className="w-4 h-4 text-primary" />
             {t('admin.hosts.vaultKeyTitle')}
           </p>
-          <p className="text-xs text-text-muted mb-3">{t('admin.hosts.vaultKeyHint')}</p>
+          <p className="text-xs text-text-muted mb-3">{t('admin.hosts.onboardIntro')}</p>
           {vaultKey.exists ? (
-            <div className="flex items-start gap-2">
-              <code className="flex-1 min-w-0 block px-3 py-2 bg-background border border-border rounded text-xs font-mono text-text-muted overflow-x-auto whitespace-nowrap">
-                {vaultKey.key}
-              </code>
-              <button
-                onClick={handleCopyVaultKey}
-                className="flex items-center gap-1.5 px-3 py-2 bg-surface-hover hover:bg-border text-text rounded text-xs font-medium transition-colors shrink-0"
-              >
-                {keyCopied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
-                {keyCopied ? t('admin.hosts.copied') : t('admin.hosts.copy')}
-              </button>
-            </div>
+            <>
+              <p className="text-xs text-text-muted mb-1">{t('admin.hosts.vaultKeyHint')}</p>
+              <div className="flex items-start gap-2 mb-3">
+                <code className="flex-1 min-w-0 block px-3 py-2 bg-background border border-border rounded text-xs font-mono text-text-muted overflow-x-auto whitespace-nowrap">
+                  {vaultKey.key}
+                </code>
+                <button
+                  onClick={handleCopyVaultKey}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-surface-hover hover:bg-border text-text rounded text-xs font-medium transition-colors shrink-0"
+                >
+                  {keyCopied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  {keyCopied ? t('admin.hosts.copied') : t('admin.hosts.copy')}
+                </button>
+              </div>
+
+              <p className="text-xs text-text-muted mb-1">{t('admin.hosts.authKeysLineHint')}</p>
+              <div className="flex items-start gap-2">
+                <code className="flex-1 min-w-0 block px-3 py-2 bg-background border border-border rounded text-xs font-mono text-text-muted overflow-x-auto whitespace-nowrap">
+                  {vaultKey.authorized_keys_line}
+                </code>
+                <button
+                  onClick={handleCopyAuthKeysLine}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-surface-hover hover:bg-border text-text rounded text-xs font-medium transition-colors shrink-0"
+                >
+                  {authKeysLineCopied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  {authKeysLineCopied ? t('admin.hosts.copied') : t('admin.hosts.copy')}
+                </button>
+              </div>
+              <p className="text-xs text-yellow-400/80 mt-2">{t('admin.hosts.authKeysLineWarning')}</p>
+            </>
           ) : (
             <p className="text-xs text-yellow-400">{t('admin.hosts.vaultKeyMissing')}</p>
           )}
