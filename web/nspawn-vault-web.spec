@@ -120,6 +120,16 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-web.service
 
 %changelog
+* Thu Oct 08 2026 Developer <dev@example.com> - 0.1.0-36
+- Adds a collapsible "Instructions: adding a new source server" checklist
+  to the Admin page's Source Hosts panel (collapsed by default). Three
+  steps: enable cockpit-nspawn's own pull-backup toggle on the source
+  server, add the host/containers here, then enable the Pull-timer switch
+  for that host. Replaces a single always-visible intro line that didn't
+  mention the Pull-timer step and could read as if it were the same
+  switch as cockpit-nspawn's toggle - they're two separate controls in
+  two separate UIs, a real point of confusion raised live this session.
+
 * Thu Oct 08 2026 Developer <dev@example.com> - 0.1.0-35
 - GET /api/admin/vault-key (vault_ssh.get_public_key()) now returns both
   the bare public key (for pasting into cockpit-nspawn's own "Enable pull
