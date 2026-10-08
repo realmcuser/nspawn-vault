@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Users, Shield, Loader2, AlertCircle, Check, X, Network, HardDrive, Bell, Server, Trash2, Pencil, Plus, Copy, KeyRound, ScrollText, Play, Mail } from 'lucide-react';
+import { Users, Shield, Loader2, AlertCircle, Check, X, Network, HardDrive, Bell, Server, Trash2, Pencil, Plus, Copy, KeyRound, ScrollText, Play, Mail, ChevronDown } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import {
   fetchUsers, updateUser, fetchAdminSettings, updateAdminSettings,
@@ -80,6 +80,7 @@ const Admin = () => {
   const [vaultKey, setVaultKey] = useState({ exists: false, key: null, authorized_keys_line: null });
   const [keyCopied, setKeyCopied] = useState(false);
   const [authKeysLineCopied, setAuthKeysLineCopied] = useState(false);
+  const [showOnboardingHelp, setShowOnboardingHelp] = useState(false);
   const [auditLog, setAuditLog] = useState(null); // { entries, total, offset, limit }
   const [auditLogError, setAuditLogError] = useState(null);
 
@@ -524,12 +525,27 @@ const Admin = () => {
         </h3>
         <p className="text-sm text-text-muted mb-4">{t('admin.hosts.description')}</p>
 
+        <button
+          type="button"
+          onClick={() => setShowOnboardingHelp((v) => !v)}
+          className="flex items-center gap-2 text-sm text-primary hover:text-primary-hover font-medium mb-4"
+        >
+          <ChevronDown className={`w-4 h-4 transition-transform ${showOnboardingHelp ? '' : '-rotate-90'}`} />
+          {t('admin.hosts.onboardingHelpToggle')}
+        </button>
+        {showOnboardingHelp && (
+          <ol className="list-decimal list-inside text-sm text-text-muted space-y-2 mb-4 pl-1">
+            <li>{t('admin.hosts.onboardingStep1')}</li>
+            <li>{t('admin.hosts.onboardingStep2')}</li>
+            <li>{t('admin.hosts.onboardingStep3')}</li>
+          </ol>
+        )}
+
         <div className="mb-4 p-4 bg-background/50 border border-border rounded-lg">
           <p className="text-sm font-medium text-text flex items-center gap-2 mb-2">
             <KeyRound className="w-4 h-4 text-primary" />
             {t('admin.hosts.vaultKeyTitle')}
           </p>
-          <p className="text-xs text-text-muted mb-3">{t('admin.hosts.onboardIntro')}</p>
           {vaultKey.exists ? (
             <>
               <p className="text-xs text-text-muted mb-1">{t('admin.hosts.vaultKeyHint')}</p>
