@@ -120,6 +120,22 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-web.service
 
 %changelog
+* Thu Oct 08 2026 Developer <dev@example.com> - 0.1.0-35
+- GET /api/admin/vault-key (vault_ssh.get_public_key()) now returns both
+  the bare public key (for pasting into cockpit-nspawn's own "Enable pull
+  backup" toggle, which builds the forced-command authorized_keys line
+  itself) and the full, pre-built authorized_keys_line (restrict,command=
+  "/usr/local/lib/nspawn-pull/dispatch.sh" + the key, for a manual install
+  that doesn't use the toggle). Previously only handed out the bare key
+  for both paths - found live that this invites pasting the bare key
+  straight into a source host's authorized_keys with no restrict= wrapper
+  at all, giving the vault's key a fully unrestricted root login on that
+  host instead of the intended dispatch.sh-only access. Confirmed live on
+  a manually-onboarded source host (2026-10-08).
+- Admin.jsx's Source Hosts panel now shows both forms with separate
+  labels/copy buttons and a warning against splitting the full line
+  apart, instead of one ambiguous key field.
+
 * Mon Aug 03 2026 Developer <dev@example.com> - 0.1.0-34
 - fetch_pull_log() (vault_systemd.py) now accepts a container name and
   slices the returned journal text down to just that container's own
