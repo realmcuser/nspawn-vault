@@ -63,7 +63,17 @@
     "acknowledgeButton": "Acknowledge & resume",
     "acknowledgeConfirmPrompt": "Optional note (why this is expected):",
     "acknowledgeSuccess": "Acknowledged - pulls resume on the next run.",
-    "acknowledgeError": "Failed to acknowledge."
+    "acknowledgeError": "Failed to acknowledge.",
+    "ransomwareThresholdTitle": "Custom ransomware threshold for this container",
+    "ransomwareThresholdOverrideHint": "Custom threshold set: {{value}} (click to change)",
+    "ransomwareThresholdModalTitle": "Ransomware threshold: {{container}}",
+    "ransomwareThresholdHint": "Leave blank to use the fleet-wide default (set under Admin → Notifications). Only set a custom value for containers that legitimately rewrite an unusually large number of files per pull (e.g. a developer environment).",
+    "ransomwareThresholdLabel": "Custom threshold (changed-entry count)",
+    "ransomwareThresholdPlaceholder": "default",
+    "ransomwareThresholdZeroHint": "0 disables the ransomware check entirely for this container.",
+    "ransomwareThresholdInvalid": "Enter a whole number, or leave blank for the default.",
+    "ransomwareThresholdSave": "Save",
+    "ransomwareThresholdReset": "Reset to default"
   },
   "alert": {
     "staleTitle": "Backup(s) not confirmed healthy",

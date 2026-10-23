@@ -63,7 +63,17 @@
     "acknowledgeButton": "Bekräfta & återuppta",
     "acknowledgeConfirmPrompt": "Valfri kommentar (varför detta är förväntat):",
     "acknowledgeSuccess": "Bekräftat - pullar återupptas nästa körning.",
-    "acknowledgeError": "Kunde inte bekräfta."
+    "acknowledgeError": "Kunde inte bekräfta.",
+    "ransomwareThresholdTitle": "Eget ransomware-tröskelvärde för den här containern",
+    "ransomwareThresholdOverrideHint": "Eget tröskelvärde satt: {{value}} (klicka för att ändra)",
+    "ransomwareThresholdModalTitle": "Ransomware-tröskel: {{container}}",
+    "ransomwareThresholdHint": "Lämna tomt för att använda flottans standardvärde (ställs in under Admin → Meddelanden). Sätt ett eget värde bara för containrar som legitimt skriver om ovanligt många filer per pull (t.ex. en utvecklingsmiljö).",
+    "ransomwareThresholdLabel": "Eget tröskelvärde (antal ändrade poster)",
+    "ransomwareThresholdPlaceholder": "standard",
+    "ransomwareThresholdZeroHint": "0 stänger av ransomware-kontrollen helt för den här containern.",
+    "ransomwareThresholdInvalid": "Ange ett heltal, eller lämna tomt för standardvärdet.",
+    "ransomwareThresholdSave": "Spara",
+    "ransomwareThresholdReset": "Återställ till standard"
   },
   "alert": {
     "staleTitle": "Backup(er) ej bekräftat friska",

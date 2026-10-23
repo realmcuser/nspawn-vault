@@ -51,6 +51,10 @@ class AcknowledgeRansomware(BaseModel):
     note: str = ""
 
 
+class RansomwareThresholdUpdate(BaseModel):
+    threshold: int | None = None
+
+
 class EmailRecipient(BaseModel):
     email: str
     category: Literal["admin", "user"] = "admin"
@@ -160,6 +164,7 @@ async def get_host_detail(host: str, current_user=Depends(get_current_user)):
             "ransomware_suspected": bool(state.get("ransomware_suspected")) if state else False,
             "dnf_update_detected": bool(state.get("dnf_update_detected")) if state else False,
             "paused": vault_state.is_paused(host, container),
+            "ransomware_threshold_override": vault_config.read_container_ransomware_threshold(host, container),
         })
 
     return {
@@ -384,6 +389,36 @@ async def acknowledge_ransomware(
         client_ip=request.client.host if request.client else None,
     )
     return {"host": host, "container": container, "acknowledged": True}
+
+
+@router.put("/api/admin/hosts/{host}/containers/{container}/ransomware-threshold")
+async def set_container_ransomware_threshold(
+    request: Request,
+    host: str,
+    container: str,
+    data: RansomwareThresholdUpdate,
+    current_user=Depends(get_current_admin),
+    db=Depends(get_db),
+):
+    """Per-container override of the ransomware-detection diff threshold -
+    lets one container (e.g. a developer environment that legitimately
+    rewrites tens of thousands of files per pull) use its own number
+    instead of the fleet-wide default, without weakening detection for
+    every other container. threshold=null clears the override, reverting
+    to the global default."""
+    host = unquote(host)
+    container = unquote(container)
+    _validate_host_container(host, container)
+    if data.threshold is not None and data.threshold < 0:
+        raise HTTPException(status_code=400, detail="threshold must be >= 0")
+
+    vault_config.write_container_ransomware_threshold(host, container, data.threshold)
+    vault_audit.log_action(
+        db, current_user.username, "set_ransomware_threshold", host, container,
+        detail=str(data.threshold) if data.threshold is not None else "default",
+        client_ip=request.client.host if request.client else None,
+    )
+    return {"host": host, "container": container, "threshold": data.threshold}
 
 
 @router.get("/api/settings/gfs")

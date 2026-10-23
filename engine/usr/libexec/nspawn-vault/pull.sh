@@ -196,6 +196,17 @@ NOTIFY_CONF=/etc/nspawn-vault/notify.conf
 [ -f "$NOTIFY_CONF" ] && source "$NOTIFY_CONF"
 THRESHOLD="${RANSOMWARE_DIFF_THRESHOLD:-500}"
 case "$THRESHOLD" in ''|*[!0-9]*) THRESHOLD=500 ;; esac
+# Valfri per-container-override - låter en enskild container (t.ex. en
+# utvecklingsmiljö som helt legitimt skriver om tiotusentals filer per pull)
+# använda ett eget tröskelvärde istället för att det globala värdet måste
+# försvagas för hela flottan. Samma "0 = av"-semantik som ovan, bara
+# avgränsat till den här containern. Filen hanteras av
+# nspawn-vault-web (vault_config.py), inte manuellt.
+PER_CONTAINER_THRESHOLD_FILE="/etc/nspawn-vault/${HOST}/${NAME}.ransomware-threshold"
+if [ -f "$PER_CONTAINER_THRESHOLD_FILE" ]; then
+    PCT=$(tr -d '[:space:]' < "$PER_CONTAINER_THRESHOLD_FILE")
+    case "$PCT" in ''|*[!0-9]*) : ;; *) THRESHOLD="$PCT" ;; esac
+fi
 # Grace period: hoppa över kontrollen för en containers första GRACE_PULLS
 # pullar - en nyskapad container fylls ofta med filer under sina första
 # körningar (initial datamigrering etc.), vilket annars trippar tröskeln

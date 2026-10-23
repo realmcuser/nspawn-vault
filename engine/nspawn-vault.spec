@@ -109,6 +109,18 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-check.timer nspawn-vault-prune.timer
 
 %changelog
+* Fri Oct 23 2026 Developer <dev@example.com> - 0.1.0-23
+- Adds an optional per-container override of the ransomware-detection
+  diff threshold: pull.sh now checks
+  /etc/nspawn-vault/<host>/<container>.ransomware-threshold before
+  falling back to the fleet-wide RANSOMWARE_DIFF_THRESHOLD (notify.conf).
+  Built for containers whose legitimate workload otherwise trips the
+  global threshold on every pull (a developer environment that rewrites
+  ~76,000 files in one go was the concrete case) - without weakening
+  detection for every other container by raising the global default.
+  Same "0 disables" semantics as the existing global setting, just scoped
+  to one container. See nspawn-vault-web for the matching Admin UI.
+
 * Sun Oct 04 2026 Developer <dev@example.com> - 0.1.0-22
 - Fixes cosmetic log noise in step 2b, caught by the first real end-to-end
   test against an upgraded source host: list-capabilities.sh's own

@@ -188,6 +188,38 @@ def write_host_language(host: str, language: str) -> None:
     _atomic_write_text(path, f"{language}\n")
 
 
+def read_container_ransomware_threshold(host: str, container: str) -> int | None:
+    """Per-container override of RANSOMWARE_DIFF_THRESHOLD (notify.conf) -
+    pull.sh checks <host>/<container>.ransomware-threshold before falling
+    back to the fleet-wide default, so one container whose legitimate
+    workload rewrites far more files per pull than is normal elsewhere
+    (e.g. a developer environment) doesn't need the global threshold
+    weakened for every other container too. Same "0 disables" semantics
+    as the global setting, just scoped to this one container. Missing
+    file -> None (use the global default)."""
+    path = NSPAWN_VAULT_ETC / host / f"{container}.ransomware-threshold"
+    if not path.is_file():
+        return None
+    value = path.read_text().strip()
+    return int(value) if value.isdigit() else None
+
+
+def write_container_ransomware_threshold(host: str, container: str, threshold: int | None) -> None:
+    """threshold=None removes the override file, reverting that container
+    to the global default again."""
+    validate_hostname(host)
+    validate_container_name(container)
+    path = NSPAWN_VAULT_ETC / host / f"{container}.ransomware-threshold"
+    if not path.parent.is_dir():
+        raise ValueError(f"host not found: {host}")
+    if threshold is None:
+        path.unlink(missing_ok=True)
+        return
+    if threshold < 0:
+        raise ValueError(f"invalid threshold: {threshold!r}")
+    _atomic_write_text(path, f"{threshold}\n")
+
+
 def list_configured_hosts() -> list[str]:
     if not NSPAWN_VAULT_ETC.is_dir():
         return []

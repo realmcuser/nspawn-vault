@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Archive, Database, Play, Loader2, Check, Download, FolderOpen } from 'lucide-react';
+import { ArrowLeft, Archive, Database, Play, Loader2, Check, Download, FolderOpen, Gauge } from 'lucide-react';
 import {
   fetchHostDetail, fetchContainerLog, triggerHostPull,
   fetchContainerSnapshots, buildContainerDownloadUrl, acknowledgeRansomware,
+  updateContainerRansomwareThreshold,
 } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import StatusBadge from '../components/StatusBadge';
@@ -27,6 +28,7 @@ const HostDetail = () => {
   const [browseContainer, setBrowseContainer] = useState(null);
   const [acking, setAcking] = useState(null); // container name currently being acknowledged
   const [ackResult, setAckResult] = useState(null); // { container, success, message }
+  const [thresholdModal, setThresholdModal] = useState(null); // { container, value, saving, error }
 
   useEffect(() => {
     fetchHostDetail(host)
@@ -87,6 +89,34 @@ const HostDetail = () => {
       setAckResult({ container, success: false, message: err.message });
     } finally {
       setAcking(null);
+    }
+  };
+
+  const openThresholdModal = (container, currentOverride) => {
+    setThresholdModal({
+      container,
+      value: currentOverride != null ? String(currentOverride) : '',
+      saving: false,
+      error: null,
+    });
+  };
+
+  const handleSaveThreshold = async (clear = false) => {
+    if (!thresholdModal) return;
+    const raw = clear ? null : thresholdModal.value.trim();
+    if (!clear && raw !== '' && !/^\d+$/.test(raw)) {
+      setThresholdModal((p) => ({ ...p, error: t('host.ransomwareThresholdInvalid') }));
+      return;
+    }
+    const threshold = clear || raw === '' ? null : parseInt(raw, 10);
+    setThresholdModal((p) => ({ ...p, saving: true, error: null }));
+    try {
+      await updateContainerRansomwareThreshold(host, thresholdModal.container, threshold);
+      const fresh = await fetchHostDetail(host);
+      setDetail(fresh);
+      setThresholdModal(null);
+    } catch (err) {
+      setThresholdModal((p) => ({ ...p, saving: false, error: err.message }));
     }
   };
 
@@ -261,6 +291,21 @@ const HostDetail = () => {
                       >
                         <Download className="w-4 h-4" />
                       </button>
+                      <button
+                        onClick={() => openThresholdModal(c.name, c.ransomware_threshold_override)}
+                        className={`p-1.5 rounded-lg transition-colors ${
+                          c.ransomware_threshold_override != null
+                            ? 'text-primary hover:bg-primary/10'
+                            : 'text-text-muted hover:text-primary hover:bg-primary/10'
+                        }`}
+                        title={
+                          c.ransomware_threshold_override != null
+                            ? t('host.ransomwareThresholdOverrideHint', { value: c.ransomware_threshold_override })
+                            : t('host.ransomwareThresholdTitle')
+                        }
+                      >
+                        <Gauge className="w-4 h-4" />
+                      </button>
                     </td>
                   )}
                 </tr>
@@ -349,6 +394,47 @@ const HostDetail = () => {
 
       {browseContainer && (
         <SnapshotBrowser host={host} container={browseContainer} onClose={() => setBrowseContainer(null)} />
+      )}
+
+      {thresholdModal && (
+        <Modal
+          title={t('host.ransomwareThresholdModalTitle', { container: thresholdModal.container })}
+          onClose={() => setThresholdModal(null)}
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-text-muted">{t('host.ransomwareThresholdHint')}</p>
+            <div>
+              <label className="block text-sm text-text-muted mb-1">{t('host.ransomwareThresholdLabel')}</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={thresholdModal.value}
+                onChange={(e) => setThresholdModal((p) => ({ ...p, value: e.target.value, error: null }))}
+                placeholder={t('host.ransomwareThresholdPlaceholder')}
+                className="w-full bg-background border border-border rounded px-3 py-2 text-text text-sm font-mono focus:outline-none focus:border-primary"
+              />
+              <p className="text-xs text-text-muted mt-1">{t('host.ransomwareThresholdZeroHint')}</p>
+            </div>
+            {thresholdModal.error && <p className="text-red-400 text-sm">{thresholdModal.error}</p>}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => handleSaveThreshold(false)}
+                disabled={thresholdModal.saving}
+                className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                {thresholdModal.saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                {t('host.ransomwareThresholdSave')}
+              </button>
+              <button
+                onClick={() => handleSaveThreshold(true)}
+                disabled={thresholdModal.saving}
+                className="px-4 py-2 bg-surface-hover hover:bg-border disabled:opacity-50 text-text rounded-lg text-sm font-medium transition-colors"
+              >
+                {t('host.ransomwareThresholdReset')}
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   );

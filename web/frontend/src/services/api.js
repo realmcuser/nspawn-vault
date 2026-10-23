@@ -326,6 +326,20 @@ export async function acknowledgeRansomware(host, container, note = '') {
   return response.json();
 }
 
+// Per-container override of the ransomware-detection diff threshold -
+// threshold=null clears the override, reverting to the fleet-wide default.
+export async function updateContainerRansomwareThreshold(host, container, threshold) {
+  const response = await fetchWithAuth(
+    `/api/admin/hosts/${encodeURIComponent(host)}/containers/${encodeURIComponent(container)}/ransomware-threshold`,
+    { method: 'PUT', body: JSON.stringify({ threshold }) },
+  );
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || 'Failed to update threshold');
+  }
+  return response.json();
+}
+
 // Starts a GFS prune run immediately instead of waiting for its daily
 // 04:00 timer. Returns as soon as it's queued, not once it's finished.
 export async function triggerPruneNow() {

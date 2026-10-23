@@ -120,6 +120,17 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-web.service
 
 %changelog
+* Fri Oct 23 2026 Developer <dev@example.com> - 0.1.0-37
+- Adds a per-container override of the ransomware-detection diff
+  threshold, matching nspawn-vault 0.1.0-23's new pull.sh support: a new
+  Gauge icon button per container in HostDetail opens a small modal to
+  set/clear a custom threshold (blank = fleet-wide default, 0 = disable
+  entirely for that container). New
+  PUT /api/admin/hosts/{host}/containers/{container}/ransomware-threshold
+  (vault_config.read/write_container_ransomware_threshold()), audited
+  like the existing acknowledge-ransomware action. GET /api/hosts/{host}
+  now includes each container's current override (if any).
+
 * Thu Oct 08 2026 Developer <dev@example.com> - 0.1.0-36
 - Adds a collapsible "Instructions: adding a new source server" checklist
   to the Admin page's Source Hosts panel (collapsed by default). Three
