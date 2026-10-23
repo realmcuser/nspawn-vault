@@ -120,6 +120,12 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-web.service
 
 %changelog
+* Fri Oct 23 2026 Developer <dev@example.com> - 0.1.0-38
+- Makes the Admin page's audit log collapsible, collapsed by default -
+  it only ever grows, and would otherwise dwarf the rest of the page
+  over time. An entry-count badge next to the header stays visible
+  either way, so it's not completely out of sight when collapsed.
+
 * Fri Oct 23 2026 Developer <dev@example.com> - 0.1.0-37
 - Adds a per-container override of the ransomware-detection diff
   threshold, matching nspawn-vault 0.1.0-23's new pull.sh support: a new
