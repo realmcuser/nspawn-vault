@@ -224,6 +224,7 @@
     },
     "audit": {
       "title": "Audit Log",
+      "countBadge": "{{count}} entries",
       "description": "Who has downloaded or browsed actual container data, and when.",
       "empty": "No entries yet.",
       "colTime": "Time",

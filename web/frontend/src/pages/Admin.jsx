@@ -83,6 +83,7 @@ const Admin = () => {
   const [showOnboardingHelp, setShowOnboardingHelp] = useState(false);
   const [auditLog, setAuditLog] = useState(null); // { entries, total, offset, limit }
   const [auditLogError, setAuditLogError] = useState(null);
+  const [auditLogExpanded, setAuditLogExpanded] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -1294,65 +1295,82 @@ const Admin = () => {
 
       {/* Audit Log */}
       <div className="bg-surface border border-border rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-          <ScrollText className="w-5 h-5" />
-          {t('admin.audit.title')}
-        </h3>
-        <p className="text-sm text-text-muted mb-4">{t('admin.audit.description')}</p>
+        <button
+          type="button"
+          onClick={() => setAuditLogExpanded((v) => !v)}
+          className="w-full flex items-center justify-between text-left"
+        >
+          <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+            <ScrollText className="w-5 h-5" />
+            {t('admin.audit.title')}
+            {auditLog && (
+              <span className="text-xs font-normal text-text-muted">
+                ({t('admin.audit.countBadge', { count: auditLog.total })})
+              </span>
+            )}
+          </h3>
+          <ChevronDown className={`w-5 h-5 text-text-muted transition-transform ${auditLogExpanded ? '' : '-rotate-90'}`} />
+        </button>
 
-        {auditLogError && (
-          <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0" />{auditLogError}
-          </div>
-        )}
-
-        {!auditLog ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="w-6 h-6 animate-spin text-primary" />
-          </div>
-        ) : auditLog.entries.length === 0 ? (
-          <p className="text-text-muted text-sm text-center py-8">{t('admin.audit.empty')}</p>
-        ) : (
+        {auditLogExpanded && (
           <>
-            <div className="border border-border rounded-lg overflow-hidden overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-surface-hover text-text-muted border-b border-border">
-                  <tr>
-                    <th className="px-4 py-3 font-medium whitespace-nowrap">{t('admin.audit.colTime')}</th>
-                    <th className="px-4 py-3 font-medium">{t('admin.audit.colUser')}</th>
-                    <th className="px-4 py-3 font-medium">{t('admin.audit.colAction')}</th>
-                    <th className="px-4 py-3 font-medium">{t('admin.audit.colHost')}</th>
-                    <th className="px-4 py-3 font-medium">{t('admin.audit.colContainer')}</th>
-                    <th className="px-4 py-3 font-medium">{t('admin.audit.colDetail')}</th>
-                    <th className="px-4 py-3 font-medium">{t('admin.audit.colIp')}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {auditLog.entries.map((e, i) => (
-                    <tr key={i} className="hover:bg-surface-hover transition-colors">
-                      <td className="px-4 py-3 font-mono text-xs whitespace-nowrap">{new Date(e.timestamp).toLocaleString()}</td>
-                      <td className="px-4 py-3 font-mono">{e.username}</td>
-                      <td className="px-4 py-3">
-                        <span className="px-2 py-0.5 rounded bg-primary/10 text-primary text-xs font-medium">
-                          {t(`admin.audit.action.${e.action}`)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 font-mono text-text-muted text-xs">{e.host}</td>
-                      <td className="px-4 py-3 font-mono text-text-muted text-xs">{e.container}{e.snapshot ? `@${e.snapshot}` : ''}</td>
-                      <td className="px-4 py-3 font-mono text-text-muted text-xs">{e.path || e.detail || '—'}</td>
-                      <td className="px-4 py-3 font-mono text-text-muted text-xs">{e.client_ip || '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {auditLog.entries.length < auditLog.total && (
-              <button
-                onClick={loadMoreAuditLog}
-                className="mt-3 w-full flex items-center justify-center gap-2 px-3 py-2 bg-surface-hover hover:bg-border text-text-muted rounded-lg text-xs font-medium transition-colors"
-              >
-                {t('host.loadMore', { shown: auditLog.entries.length, total: auditLog.total })}
-              </button>
+            <p className="text-sm text-text-muted mb-4 mt-4">{t('admin.audit.description')}</p>
+
+            {auditLogError && (
+              <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />{auditLogError}
+              </div>
+            )}
+
+            {!auditLog ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              </div>
+            ) : auditLog.entries.length === 0 ? (
+              <p className="text-text-muted text-sm text-center py-8">{t('admin.audit.empty')}</p>
+            ) : (
+              <>
+                <div className="border border-border rounded-lg overflow-hidden overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-surface-hover text-text-muted border-b border-border">
+                      <tr>
+                        <th className="px-4 py-3 font-medium whitespace-nowrap">{t('admin.audit.colTime')}</th>
+                        <th className="px-4 py-3 font-medium">{t('admin.audit.colUser')}</th>
+                        <th className="px-4 py-3 font-medium">{t('admin.audit.colAction')}</th>
+                        <th className="px-4 py-3 font-medium">{t('admin.audit.colHost')}</th>
+                        <th className="px-4 py-3 font-medium">{t('admin.audit.colContainer')}</th>
+                        <th className="px-4 py-3 font-medium">{t('admin.audit.colDetail')}</th>
+                        <th className="px-4 py-3 font-medium">{t('admin.audit.colIp')}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {auditLog.entries.map((e, i) => (
+                        <tr key={i} className="hover:bg-surface-hover transition-colors">
+                          <td className="px-4 py-3 font-mono text-xs whitespace-nowrap">{new Date(e.timestamp).toLocaleString()}</td>
+                          <td className="px-4 py-3 font-mono">{e.username}</td>
+                          <td className="px-4 py-3">
+                            <span className="px-2 py-0.5 rounded bg-primary/10 text-primary text-xs font-medium">
+                              {t(`admin.audit.action.${e.action}`)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 font-mono text-text-muted text-xs">{e.host}</td>
+                          <td className="px-4 py-3 font-mono text-text-muted text-xs">{e.container}{e.snapshot ? `@${e.snapshot}` : ''}</td>
+                          <td className="px-4 py-3 font-mono text-text-muted text-xs">{e.path || e.detail || '—'}</td>
+                          <td className="px-4 py-3 font-mono text-text-muted text-xs">{e.client_ip || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {auditLog.entries.length < auditLog.total && (
+                  <button
+                    onClick={loadMoreAuditLog}
+                    className="mt-3 w-full flex items-center justify-center gap-2 px-3 py-2 bg-surface-hover hover:bg-border text-text-muted rounded-lg text-xs font-medium transition-colors"
+                  >
+                    {t('host.loadMore', { shown: auditLog.entries.length, total: auditLog.total })}
+                  </button>
+                )}
+              </>
             )}
           </>
         )}

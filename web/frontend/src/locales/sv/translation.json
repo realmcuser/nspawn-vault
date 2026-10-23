@@ -224,6 +224,7 @@
     },
     "audit": {
       "title": "Revisionslogg",
+      "countBadge": "{{count}} poster",
       "description": "Vem som laddat ner eller bläddrat i faktisk containerdata, och när.",
       "empty": "Inga poster ännu.",
       "colTime": "Tid",
