@@ -120,6 +120,26 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-web.service
 
 %changelog
+* Thu Nov 12 2026 Developer <dev@example.com> - 0.1.0-39
+- Adds a guided Admin UI flow for setting up an "extra path" (see
+  engine 0.1.0-24's pull-extra.sh and bind-mounted-storage.md): a
+  host-level directory outside any container's own rootfs, typically data
+  reachable only via a systemd-nspawn Bind= mount and therefore invisible
+  to a normal container pull - found live on two source hosts, both fixed
+  by hand over SSH since nothing in the product itself could set this up.
+  A new "+" button next to each host's container list opens a modal that
+  takes a label and the source host's absolute path, generates a brand-new
+  dedicated SSH key server-side (never the vault's shared key - see
+  vault_ssh.create_extra_path_key), and shows the exact authorized_keys
+  line to paste onto the source host, plus a "test connection" button
+  reusing the existing host-connection-test pattern. An extra path now
+  shows as a distinctly-badged entry in the containers list rather than a
+  plain one, so an admin can tell it apart from a real container.
+- Does not add automatic detection of Bind= mounts needing this treatment
+  (a container with one still has to be noticed by a human first,
+  deliberately not built - see bind-mounted-storage.md) - this only fixes
+  the setup step, which was previously pure manual root-shell work.
+
 * Fri Oct 23 2026 Developer <dev@example.com> - 0.1.0-38
 - Makes the Admin page's audit log collapsible, collapsed by default -
   it only ever grows, and would otherwise dwarf the rest of the page

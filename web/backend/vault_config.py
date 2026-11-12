@@ -220,6 +220,45 @@ def write_container_ransomware_threshold(host: str, container: str, threshold: i
     _atomic_write_text(path, f"{threshold}\n")
 
 
+def list_extra_paths(host: str) -> list[str]:
+    """Labels of this host's "extra paths" (see
+    engine/usr/libexec/nspawn-vault/pull-extra.sh and
+    bind-mounted-storage.md) - host-level directories outside any
+    container's own rootfs, each with its own dedicated SSH key under
+    <host>/extra/<label>.key. Every label here is also in read_containers()
+    (same dashboard/staleness/ransomware-threshold handling as a real
+    container) - this is only for the UI to tell the two apart."""
+    extra_dir = NSPAWN_VAULT_ETC / host / "extra"
+    if not extra_dir.is_dir():
+        return []
+    return sorted(p.stem for p in extra_dir.glob("*.key"))
+
+
+def add_extra_path_entry(host: str, label: str) -> None:
+    """Appends `label` to the host's containers file - unlike
+    write_containers() (which replaces the whole file from a plain list),
+    this only ever appends, so it never drops an existing hand-written
+    comment explaining what an earlier extra-path entry actually is."""
+    validate_hostname(host)
+    validate_container_name(label)
+    path = NSPAWN_VAULT_ETC / host / "containers"
+    if not path.is_file():
+        raise ValueError(f"host not found: {host}")
+    if label in read_containers(host):
+        raise ValueError(f"already configured: {label}")
+    text = path.read_text()
+    if text and not text.endswith("\n"):
+        text += "\n"
+    text += (
+        "\n# Inte en riktig nspawn-container - en extra path (se "
+        "bind-mounted-storage.md i nspawn-vault-repot). Egen dedikerad "
+        f"SSH-nyckel under extra/{label}.key, rör inte den som en vanlig "
+        "container.\n"
+        f"{label}\n"
+    )
+    _atomic_write_text(path, text)
+
+
 def list_configured_hosts() -> list[str]:
     if not NSPAWN_VAULT_ETC.is_dir():
         return []

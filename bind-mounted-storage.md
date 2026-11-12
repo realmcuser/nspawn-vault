@@ -118,7 +118,22 @@ protocol - don't add them). It otherwise mirrors `pull.sh`: ZFS snapshot
 after every pull, the same `zfs diff`-based ransomware heuristic, the same
 per-name ransomware-threshold override and pause-on-suspicion behavior.
 
-### Install steps (what was done for `fhdcore-vilhelmina-shares`)
+### Install steps
+
+As of `nspawn-vault-web` 0.1.0-39, this is a guided flow in the Admin UI:
+open a host's row, click the "+" button next to its container list, enter
+a label and the source host's absolute path. The backend generates the
+key and shows the exact `authorized_keys` line to paste onto the source
+host, plus a "test connection" button. No manual `ssh-keygen` or file
+editing needed on the vault side any more - only the one paste onto the
+source host, which the vault can never do itself (it never holds
+credentials that could reach there).
+
+The steps below are what that flow actually does under the hood (and
+still the only path if you need to do this entirely by hand - e.g.
+scripting it, or before 0.1.0-39) - what was done for
+`fhdcore-vilhelmina-shares` and `fhdcore-jf2-shares` before the UI flow
+existed:
 
 On the **vault**:
 

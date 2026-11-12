@@ -340,6 +340,34 @@ export async function updateContainerRansomwareThreshold(host, container, thresh
   return response.json();
 }
 
+// Guided setup for one "extra path" (bind-mounted-storage.md): generates a
+// brand-new, dedicated SSH key server-side and returns the
+// authorized_keys line to paste onto the SOURCE host - this call never
+// SSHes there itself.
+export async function createExtraPath(host, label, remotePath) {
+  const response = await fetchWithAuth(
+    `/api/admin/hosts/${encodeURIComponent(host)}/extra-paths`,
+    { method: 'POST', body: JSON.stringify({ label, remote_path: remotePath }) },
+  );
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || 'Failed to create extra path');
+  }
+  return response.json();
+}
+
+export async function testExtraPathConnection(host, label) {
+  const response = await fetchWithAuth(
+    `/api/admin/hosts/${encodeURIComponent(host)}/extra-paths/${encodeURIComponent(label)}/test-connection`,
+    { method: 'POST' },
+  );
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || 'Failed to test extra path connection');
+  }
+  return response.json();
+}
+
 // Starts a GFS prune run immediately instead of waiting for its daily
 // 04:00 timer. Returns as soon as it's queued, not once it's finished.
 export async function triggerPruneNow() {

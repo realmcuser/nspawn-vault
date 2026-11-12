@@ -151,7 +151,21 @@
       "vaultKeyMissing": "No SSH key found on the vault yet (/root/.ssh/nspawn-vault.pub is missing).",
       "copy": "Copy",
       "copied": "Copied!",
-      "sshTrustWarning": "This only writes the pull configuration on the vault. Copy the vault's public SSH key (above) into cockpit-nspawn's pull-backup setup on this source host, where the container runs — otherwise the pull timer won't work."
+      "sshTrustWarning": "This only writes the pull configuration on the vault. Copy the vault's public SSH key (above) into cockpit-nspawn's pull-backup setup on this source host, where the container runs — otherwise the pull timer won't work.",
+      "extraPathBadgeHint": "Extra path - not a real container, a separate Bind=-mounted share with its own SSH key",
+      "addExtraPath": "Add extra path",
+      "addExtraPathTitle": "Add extra path for {{host}}",
+      "extraPathModalIntro": "For a directory on the source host that isn't inside any container's own rootfs (e.g. a Bind=-mounted Samba share) - see bind-mounted-storage.md. Generates its own dedicated SSH key that can only read this exact path.",
+      "extraPathLabelLabel": "Label (name shown on the dashboard)",
+      "extraPathLabelPlaceholder": "e.g. fhdcore-example-shares",
+      "extraPathRemotePathLabel": "Absolute path on the source host",
+      "extraPathRemotePathPlaceholder": "/srv/fhd-shares/example",
+      "extraPathRemotePathHint": "The actual directory on the source host's own filesystem, not the container's own path (e.g. not /usr/butik/samba).",
+      "extraPathCreate": "Create",
+      "extraPathCreated": "Key created for \"{{label}}\"",
+      "extraPathLineHint": "Paste the following line into the source host's /root/.ssh/authorized_keys:",
+      "extraPathLineWarning": "Without this line on the source host the vault can't read the path - the next pull will fail for this name until the line is there.",
+      "close": "Close"
     },
     "ldap": {
       "title": "LDAP",
@@ -237,7 +251,8 @@
       "action": {
         "download_archive": "Download (whole)",
         "download_file": "Download (file)",
-        "browse": "Browse"
+        "browse": "Browse",
+        "create_extra_path": "Created extra path"
       }
     }
   }

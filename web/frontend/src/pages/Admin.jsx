@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Users, Shield, Loader2, AlertCircle, Check, X, Network, HardDrive, Bell, Server, Trash2, Pencil, Plus, Copy, KeyRound, ScrollText, Play, Mail, ChevronDown } from 'lucide-react';
+import { Users, Shield, Loader2, AlertCircle, Check, X, Network, HardDrive, Bell, Server, Trash2, Pencil, Plus, Copy, KeyRound, ScrollText, Play, Mail, ChevronDown, FolderSymlink } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import Modal from '../components/Modal';
 import {
   fetchUsers, updateUser, fetchAdminSettings, updateAdminSettings,
   fetchLdapSettings, updateLdapSettings, testLdapConnection,
   fetchGfsSettings, updateGfsSettings, fetchAdminNotifySettings, updateNotifySettings, sendTestEmail,
   fetchAdminHosts, createHost, deleteHost, updateHostContainers, updateHostNotifySettings, updateHostTimer,
   testHostConnection, fetchVaultPublicKey, fetchAuditLog, triggerPruneNow,
+  createExtraPath, testExtraPathConnection,
 } from '../services/api';
 
 const EMPTY_LDAP = {
@@ -84,6 +86,16 @@ const Admin = () => {
   const [auditLog, setAuditLog] = useState(null); // { entries, total, offset, limit }
   const [auditLogError, setAuditLogError] = useState(null);
   const [auditLogExpanded, setAuditLogExpanded] = useState(false);
+
+  const [extraPathModalHost, setExtraPathModalHost] = useState(null);
+  const [extraPathLabel, setExtraPathLabel] = useState('');
+  const [extraPathRemotePath, setExtraPathRemotePath] = useState('');
+  const [creatingExtraPath, setCreatingExtraPath] = useState(false);
+  const [extraPathError, setExtraPathError] = useState(null);
+  const [extraPathResult, setExtraPathResult] = useState(null); // { label, authorized_keys_line }
+  const [extraPathLineCopied, setExtraPathLineCopied] = useState(false);
+  const [testingExtraPath, setTestingExtraPath] = useState(false);
+  const [extraPathTestResult, setExtraPathTestResult] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -312,6 +324,55 @@ const Admin = () => {
       setHostsError(err.message);
     } finally {
       setSavingContainers(false);
+    }
+  };
+
+  const handleOpenExtraPathModal = (host) => {
+    setExtraPathModalHost(host);
+    setExtraPathLabel('');
+    setExtraPathRemotePath('');
+    setExtraPathError(null);
+    setExtraPathResult(null);
+    setExtraPathTestResult(null);
+  };
+
+  const handleCloseExtraPathModal = () => {
+    setExtraPathModalHost(null);
+  };
+
+  const handleCreateExtraPath = async () => {
+    setCreatingExtraPath(true);
+    setExtraPathError(null);
+    try {
+      const result = await createExtraPath(extraPathModalHost, extraPathLabel.trim(), extraPathRemotePath.trim());
+      setExtraPathResult(result);
+      setHosts(hosts.map((h) => (h.host === extraPathModalHost
+        ? { ...h, containers: [...h.containers, result.label], extra_paths: [...(h.extra_paths || []), result.label] }
+        : h)));
+    } catch (err) {
+      setExtraPathError(err.message);
+    } finally {
+      setCreatingExtraPath(false);
+    }
+  };
+
+  const handleCopyExtraPathLine = async () => {
+    if (!extraPathResult?.authorized_keys_line) return;
+    await navigator.clipboard.writeText(extraPathResult.authorized_keys_line);
+    setExtraPathLineCopied(true);
+    setTimeout(() => setExtraPathLineCopied(false), 2000);
+  };
+
+  const handleTestExtraPathConnection = async () => {
+    setTestingExtraPath(true);
+    setExtraPathTestResult(null);
+    try {
+      const result = await testExtraPathConnection(extraPathModalHost, extraPathResult.label);
+      setExtraPathTestResult(result);
+    } catch (err) {
+      setExtraPathTestResult({ success: false, message: err.message });
+    } finally {
+      setTestingExtraPath(false);
     }
   };
 
@@ -651,7 +712,17 @@ const Admin = () => {
                           <span className="text-text-muted italic">{t('admin.hosts.noContainers')}</span>
                         ) : (
                           h.containers.map((c) => (
-                            <span key={c} className="px-2 py-0.5 rounded bg-surface-hover text-text text-xs font-mono">{c}</span>
+                            (h.extra_paths || []).includes(c) ? (
+                              <span
+                                key={c}
+                                title={t('admin.hosts.extraPathBadgeHint')}
+                                className="flex items-center gap-1 px-2 py-0.5 rounded bg-primary/10 text-primary text-xs font-mono"
+                              >
+                                <FolderSymlink className="w-3 h-3" />{c}
+                              </span>
+                            ) : (
+                              <span key={c} className="px-2 py-0.5 rounded bg-surface-hover text-text text-xs font-mono">{c}</span>
+                            )
                           ))
                         )}
                         <button
@@ -660,6 +731,14 @@ const Admin = () => {
                           title={t('admin.hosts.editContainers')}
                         >
                           <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleOpenExtraPathModal(h.host)}
+                          className="flex items-center gap-1 p-1 text-text-muted hover:text-primary hover:bg-primary/10 rounded transition-colors"
+                          title={t('admin.hosts.addExtraPath')}
+                        >
+                          <FolderSymlink className="w-3.5 h-3.5" />
+                          <Plus className="w-2.5 h-2.5" />
                         </button>
                       </div>
                     )}
@@ -1375,6 +1454,103 @@ const Admin = () => {
           </>
         )}
       </div>
+
+      {extraPathModalHost && (
+        <Modal title={t('admin.hosts.addExtraPathTitle', { host: extraPathModalHost })} onClose={handleCloseExtraPathModal}>
+          {!extraPathResult ? (
+            <div className="space-y-3">
+              <p className="text-sm text-text-muted">{t('admin.hosts.extraPathModalIntro')}</p>
+              <div>
+                <label className="block text-xs text-text-muted mb-1">{t('admin.hosts.extraPathLabelLabel')}</label>
+                <input
+                  type="text"
+                  value={extraPathLabel}
+                  onChange={(e) => setExtraPathLabel(e.target.value)}
+                  placeholder={t('admin.hosts.extraPathLabelPlaceholder')}
+                  className="w-full bg-background border border-border rounded px-2 py-1.5 text-text text-sm font-mono focus:outline-none focus:border-primary"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-text-muted mb-1">{t('admin.hosts.extraPathRemotePathLabel')}</label>
+                <input
+                  type="text"
+                  value={extraPathRemotePath}
+                  onChange={(e) => setExtraPathRemotePath(e.target.value)}
+                  placeholder={t('admin.hosts.extraPathRemotePathPlaceholder')}
+                  className="w-full bg-background border border-border rounded px-2 py-1.5 text-text text-sm font-mono focus:outline-none focus:border-primary"
+                />
+                <p className="mt-1 text-xs text-text-muted">{t('admin.hosts.extraPathRemotePathHint')}</p>
+              </div>
+              {extraPathError && (
+                <div className="p-2 bg-red-500/10 border border-red-500/20 rounded text-red-400 text-xs flex items-center gap-2">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />{extraPathError}
+                </div>
+              )}
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={handleCreateExtraPath}
+                  disabled={creatingExtraPath || !extraPathLabel.trim() || !extraPathRemotePath.trim()}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary-hover text-white rounded text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  {creatingExtraPath ? <Loader2 className="w-4 h-4 animate-spin" /> : <FolderSymlink className="w-4 h-4" />}
+                  {t('admin.hosts.extraPathCreate')}
+                </button>
+                <button
+                  onClick={handleCloseExtraPathModal}
+                  className="px-3 py-1.5 bg-surface-hover hover:bg-border text-text rounded text-sm font-medium transition-colors"
+                >
+                  {t('admin.hosts.cancel')}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-green-400 flex items-center gap-2">
+                <Check className="w-4 h-4 shrink-0" />{t('admin.hosts.extraPathCreated', { label: extraPathResult.label })}
+              </p>
+              <p className="text-xs text-text-muted">{t('admin.hosts.extraPathLineHint')}</p>
+              <div className="flex items-start gap-2">
+                <code className="flex-1 min-w-0 block px-3 py-2 bg-background border border-border rounded text-xs font-mono text-text-muted overflow-x-auto whitespace-nowrap">
+                  {extraPathResult.authorized_keys_line}
+                </code>
+                <button
+                  onClick={handleCopyExtraPathLine}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-surface-hover hover:bg-border text-text rounded text-xs font-medium transition-colors shrink-0"
+                >
+                  {extraPathLineCopied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  {extraPathLineCopied ? t('admin.hosts.copied') : t('admin.hosts.copy')}
+                </button>
+              </div>
+              <p className="text-xs text-yellow-400/80">{t('admin.hosts.extraPathLineWarning')}</p>
+
+              <div className="pt-2 border-t border-border">
+                <button
+                  onClick={handleTestExtraPathConnection}
+                  disabled={testingExtraPath}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-hover hover:bg-border text-text rounded text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  {testingExtraPath ? <Loader2 className="w-4 h-4 animate-spin" /> : <Network className="w-4 h-4" />}
+                  {t('admin.hosts.testConnection')}
+                </button>
+                {extraPathTestResult && (
+                  <p className={`mt-2 text-xs ${extraPathTestResult.success ? 'text-green-400' : 'text-red-400'}`}>
+                    {extraPathTestResult.message}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex justify-end pt-1">
+                <button
+                  onClick={handleCloseExtraPathModal}
+                  className="px-3 py-1.5 bg-surface-hover hover:bg-border text-text rounded text-sm font-medium transition-colors"
+                >
+                  {t('admin.hosts.close')}
+                </button>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
     </div>
   );
 };

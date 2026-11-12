@@ -151,7 +151,21 @@
       "vaultKeyMissing": "Ingen SSH-nyckel hittades på valvet ännu (/root/.ssh/nspawn-vault.pub saknas).",
       "copy": "Kopiera",
       "copied": "Kopierad!",
-      "sshTrustWarning": "Detta skriver bara pull-konfigurationen på valvet. Kopiera valvets publika SSH-nyckel (ovan) till pull-backup-inställningen i cockpit-nspawn på den här källservern, där containern körs — annars fungerar inte pull-timern."
+      "sshTrustWarning": "Detta skriver bara pull-konfigurationen på valvet. Kopiera valvets publika SSH-nyckel (ovan) till pull-backup-inställningen i cockpit-nspawn på den här källservern, där containern körs — annars fungerar inte pull-timern.",
+      "extraPathBadgeHint": "Extra path - inte en riktig container, en egen Bind=-monterad delning med egen SSH-nyckel",
+      "addExtraPath": "Lägg till extra path",
+      "addExtraPathTitle": "Lägg till extra path för {{host}}",
+      "extraPathModalIntro": "För en katalog på källservern som inte ligger inuti någon containers egen rotfs (t.ex. en Bind=-monterad Samba-delning) - se bind-mounted-storage.md. Genererar en egen, dedikerad SSH-nyckel som bara kan läsa exakt den här sökvägen.",
+      "extraPathLabelLabel": "Etikett (namn i dashboarden)",
+      "extraPathLabelPlaceholder": "t.ex. fhdcore-exempel-shares",
+      "extraPathRemotePathLabel": "Absolut sökväg på källservern",
+      "extraPathRemotePathPlaceholder": "/srv/fhd-shares/exempel",
+      "extraPathRemotePathHint": "Den faktiska katalogen på källserverns eget filsystem, inte containerns egen sökväg (t.ex. inte /usr/butik/samba).",
+      "extraPathCreate": "Skapa",
+      "extraPathCreated": "Nyckel skapad för \"{{label}}\"",
+      "extraPathLineHint": "Klistra in följande rad i källserverns /root/.ssh/authorized_keys:",
+      "extraPathLineWarning": "Utan den här raden på källservern kan valvet inte läsa sökvägen - nästa pull misslyckas för det här namnet tills raden finns där.",
+      "close": "Stäng"
     },
     "ldap": {
       "title": "LDAP",
@@ -237,7 +251,8 @@
       "action": {
         "download_archive": "Ladda ner (hel)",
         "download_file": "Ladda ner (fil)",
-        "browse": "Bläddra"
+        "browse": "Bläddra",
+        "create_extra_path": "Skapade extra path"
       }
     }
   }

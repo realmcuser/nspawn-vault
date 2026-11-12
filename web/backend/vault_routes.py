@@ -84,6 +84,11 @@ class HostConnectionTest(BaseModel):
     host: str
 
 
+class ExtraPathCreate(BaseModel):
+    label: str
+    remote_path: str
+
+
 _STATUS_RANK = {"ransomware": 4, "failed": 3, "stale": 2, "unknown": 1, "ok": 0}
 
 
@@ -137,6 +142,7 @@ async def get_host_detail(host: str, current_user=Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Host not found")
 
     gfs_conf = vault_config.read_gfs_conf()
+    extra_paths = set(vault_config.list_extra_paths(host))
     containers = []
     for container in vault_config.read_containers(host):
         dataset = _dataset_for(host, container)
@@ -165,6 +171,7 @@ async def get_host_detail(host: str, current_user=Depends(get_current_user)):
             "dnf_update_detected": bool(state.get("dnf_update_detected")) if state else False,
             "paused": vault_state.is_paused(host, container),
             "ransomware_threshold_override": vault_config.read_container_ransomware_threshold(host, container),
+            "is_extra_path": container in extra_paths,
         })
 
     return {
@@ -475,6 +482,7 @@ async def list_hosts_admin(current_user=Depends(get_current_admin)):
         hosts.append({
             "host": host,
             "containers": vault_config.read_containers(host),
+            "extra_paths": vault_config.list_extra_paths(host),
             "emails": vault_config.read_host_emails(host),
             "admin_contact": vault_config.read_host_admin_contact(host),
             "language": vault_config.read_host_language(host),
@@ -491,6 +499,46 @@ async def get_vault_public_key(current_user=Depends(get_current_admin)):
     here for a new source host's authorized_keys line, instead of SSHing
     into the vault to read /root/.ssh/nspawn-vault.pub by hand."""
     return vault_ssh.get_public_key()
+
+
+@router.post("/api/admin/hosts/{host}/extra-paths", status_code=201)
+async def create_extra_path_admin(host: str, data: ExtraPathCreate, request: Request, current_user=Depends(get_current_admin), db=Depends(get_db)):
+    """Guided setup for one "extra path" (see bind-mounted-storage.md): a
+    host-level directory outside any container's own rootfs, typically data
+    reachable only via a systemd-nspawn Bind= mount and therefore invisible
+    to a normal container pull. Generates a brand-new, dedicated SSH key
+    (never the vault's shared one - see vault_ssh.create_extra_path_key),
+    adds the label to the host's containers file (same dashboard/
+    staleness/ransomware-threshold handling as a real container), and hands
+    back the authorized_keys line to paste onto the SOURCE host - this
+    process never SSHes there itself, same boundary as every other
+    source-host install step in this app."""
+    host = unquote(host)
+    if host not in vault_config.list_configured_hosts():
+        raise HTTPException(status_code=404, detail="Host not found")
+    try:
+        vault_config.validate_container_name(data.label)
+        if data.label in vault_config.read_containers(host):
+            raise ValueError(f"already configured: {data.label}")
+        result = vault_ssh.create_extra_path_key(host, data.label, data.remote_path)
+        vault_config.add_extra_path_entry(host, data.label)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    vault_audit.log_action(
+        db, current_user.username, "create_extra_path", host, data.label,
+        detail=data.remote_path,
+        client_ip=request.client.host if request.client else None,
+    )
+    return result
+
+
+@router.post("/api/admin/hosts/{host}/extra-paths/{label}/test-connection")
+async def test_extra_path_connection_admin(host: str, label: str, current_user=Depends(get_current_admin)):
+    host = unquote(host)
+    label = unquote(label)
+    if label not in vault_config.list_extra_paths(host):
+        raise HTTPException(status_code=404, detail="Extra path not found")
+    return vault_ssh.test_extra_path_connection(host, label)
 
 
 @router.get("/api/admin/audit-log")
