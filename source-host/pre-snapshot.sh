@@ -31,8 +31,8 @@
 # earlier) with no systemd inside at all. systemd-run then fails outright
 # ("Failed to connect to bus") before the hook command ever runs, so this
 # falls back to nsenter in that one specific case - see run_in_container()
-# below. Confirmed live 2026-11-12 against fhd-kompass on
-# vilhelmina-csrv.vpn.fhd.se (CentOS 7.9, no systemd).
+# below. Confirmed live 2026-11-12 against a real customer container
+# (CentOS 7.9, no systemd).
 
 set -euo pipefail
 
