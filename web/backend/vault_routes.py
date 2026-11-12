@@ -89,7 +89,7 @@ class ExtraPathCreate(BaseModel):
     remote_path: str
 
 
-_STATUS_RANK = {"ransomware": 4, "failed": 3, "stale": 2, "unknown": 1, "ok": 0}
+_STATUS_RANK = {"ransomware": 4, "failed": 3, "unreadable": 3, "stale": 2, "unknown": 1, "ok": 0}
 
 
 def _dataset_for(host: str, container: str) -> str:
@@ -702,7 +702,13 @@ async def get_alerts_summary(current_user=Depends(get_current_user)):
         worst = _worst_status(statuses)
         if worst == "ransomware":
             ransomware_hosts.append(host)
-        elif worst == "failed":
+        elif worst in ("failed", "unreadable"):
+            # "unreadable" (a status file that exists but isn't valid
+            # JSON - see vault_state.read_state()) has no dashboard bucket
+            # of its own; folded into failed_hosts since it's at least as
+            # much a problem worth surfacing, not something to silently
+            # rank alongside "ok" (_STATUS_RANK gives it the same weight
+            # as "failed" for exactly this reason).
             failed_hosts.append(host)
         elif worst == "stale":
             stale_hosts.append(host)

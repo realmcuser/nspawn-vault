@@ -109,6 +109,23 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-check.timer nspawn-vault-prune.timer
 
 %changelog
+* Thu Nov 12 2026 Developer <dev@example.com> - 0.1.0-25
+- Fixes pull.sh's/pull-extra.sh's fail() writing invalid JSON to the state
+  file whenever the captured command output it folds in (ssh/rsync/zfs
+  error text) contains a raw control character other than a newline - the
+  old hand-rolled escaping only covered backslash and quote. Confirmed
+  live: a trailing \r in an ssh connection error ("Network is unreachable")
+  produced an unparseable state file, which check-stale.sh and the web UI
+  then silently misread as result=missing with a nonsense multi-year age
+  instead of the real failure. Now built via python3's json.dumps, which
+  covers every JSON-mandated escape. Also makes check-stale.sh distinguish
+  a status file that exists but fails to parse (result=unreadable, using
+  the file's own mtime as a fallback ts) from one that's genuinely absent
+  (result=missing) - mirrored in the web backend's vault_state.py per this
+  project's own staleness-logic-must-match rule, including a new
+  "Unreadable" badge/hint in the UI and folding it into the same alert
+  bucket as a failed pull in GET /api/alerts/summary.
+
 * Thu Nov 12 2026 Developer <dev@example.com> - 0.1.0-24
 - Adds pull-extra.sh and pull-host.sh support for "extra paths": host-level
   directories that live outside any container's own rootfs tree, typically

@@ -6,6 +6,7 @@ const STYLES = {
   stale: 'bg-yellow-500/10 text-yellow-400',
   failed: 'bg-red-500/10 text-red-400',
   unknown: 'bg-slate-500/10 text-slate-400',
+  unreadable: 'bg-red-500/10 text-red-400',
   running: 'bg-primary/10 text-primary',
   // Deliberately more alarming than "failed" - a plain red/10 badge would
   // read the same as an ordinary pull failure, which undersells this.
@@ -17,6 +18,7 @@ const LABELS = {
   stale: 'Stale',
   failed: 'Failed',
   unknown: 'Unknown',
+  unreadable: 'Unreadable',
   running: 'Running',
   ransomware: 'Ransomware?',
 };

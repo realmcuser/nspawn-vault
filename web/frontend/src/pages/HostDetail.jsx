@@ -224,6 +224,9 @@ const HostDetail = () => {
                     {!detail.pull_running && c.status === 'failed' && c.last_pull_msg && (
                       <p className="text-xs text-red-400/80 mt-1">{c.last_pull_msg}</p>
                     )}
+                    {!detail.pull_running && c.status === 'unreadable' && (
+                      <p className="text-xs text-red-400/80 mt-1">{t('host.statusUnreadableHint')}</p>
+                    )}
                     {!detail.pull_running && c.ransomware_suspected && c.paused && (
                       <div className="mt-1">
                         <p className="text-xs text-red-400/80">

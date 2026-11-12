@@ -46,10 +46,17 @@ fail() {
     # pass a static string with no quotes/newlines in it, so this was never
     # hit, but run_remote() below now passes real captured command output,
     # which can easily contain either and would otherwise produce invalid
-    # JSON in the state file.
+    # JSON in the state file. The sed-based escaping used to only cover
+    # backslash/quote, which missed any other raw control byte (e.g. a
+    # literal \r in ssh's own error text - "Network is unreachable\r",
+    # confirmed live 2026-11-12) - that produced a state file check-stale.sh
+    # and the web UI couldn't parse at all, not just a wrong "msg" value.
+    # python3's json.dumps covers every JSON-mandated escape, not just the
+    # two this used to handle by hand.
     local msg
-    msg=$(printf '%s' "$1" | tr '\n' ' ' | sed 's/\\/\\\\/g; s/"/\\"/g')
-    printf '{"result":"failed","ts":"%s","msg":"%s"}\n' "$(date -Iseconds)" "$msg" > "$STATE"
+    msg=$(printf '%s' "$1" | tr '\n' ' ')
+    msg=$(python3 -c 'import json, sys; print(json.dumps(sys.argv[1]))' "$msg")
+    printf '{"result":"failed","ts":"%s","msg":%s}\n' "$(date -Iseconds)" "$msg" > "$STATE"
     echo "FAILED: $1" >&2
     exit 1
 }

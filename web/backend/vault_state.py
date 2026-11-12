@@ -9,7 +9,7 @@ THRESHOLD_MIN = 180
 
 STATE_DIR = Path("/var/lib/nspawn-vault/state")
 
-Status = Literal["ok", "stale", "failed", "unknown", "ransomware"]
+Status = Literal["ok", "stale", "failed", "unknown", "ransomware", "unreadable"]
 
 
 def state_file_for(dataset: str) -> Path:
@@ -23,7 +23,23 @@ def read_state(dataset: str) -> Optional[dict]:
         return None
     try:
         return json.loads(path.read_text())
-    except (json.JSONDecodeError, OSError):
+    except json.JSONDecodeError:
+        # Exists but isn't valid JSON - mirrors check-stale.sh's
+        # result=unreadable (a distinct case from "no file at all", see
+        # that script's comment for why: a raw control byte in a captured
+        # command's output used to be enough to break this, confirmed live
+        # 2026-11-12, since fixed at the source in pull.sh's/pull-extra.sh's
+        # fail()). The file's own mtime stands in for "ts" since the real
+        # one can't be read.
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            mtime = 0
+        return {
+            "result": "unreadable",
+            "ts": datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat(),
+        }
+    except OSError:
         return None
 
 
@@ -48,6 +64,8 @@ def compute_status(state: Optional[dict]) -> Status:
         # outrank a plain "ok" regardless.
         return "ransomware"
     result = state.get("result", "missing")
+    if result == "unreadable":
+        return "unreadable"
     if result != "success":
         return "failed"
     age = age_minutes(state)
@@ -58,7 +76,7 @@ def compute_status(state: Optional[dict]) -> Status:
 
 def is_alerting(status: Status) -> bool:
     """Matches check-stale.sh's errors += 1 condition exactly."""
-    return status in ("stale", "failed", "ransomware")
+    return status in ("stale", "failed", "ransomware", "unreadable")
 
 
 def changed_entries(state: Optional[dict]) -> int:

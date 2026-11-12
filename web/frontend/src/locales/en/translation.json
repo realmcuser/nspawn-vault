@@ -44,6 +44,7 @@
     "logScopeHint": "Filtered to this container - the underlying run pulls every container on this host together, so an occasional unrelated line may still slip through.",
     "noLogAvailable": "No log data found for this pull (the journal may have already rotated it out).",
     "dbBackedUpHint": "Last successful pull included a database dump",
+    "statusUnreadableHint": "The status file for the last pull could not be parsed as valid JSON - likely a corrupted or interrupted write. Check the pull log for the real cause.",
     "runNow": "Run now",
     "pullStarted": "Pull backup started. This can take anywhere from seconds to an hour depending on how much has changed since last time.",
     "download": "Download",

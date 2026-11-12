@@ -120,6 +120,17 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-web.service
 
 %changelog
+* Thu Nov 12 2026 Developer <dev@example.com> - 0.1.0-40
+- Adds an "unreadable" status (vault_state.py), distinct from "unknown",
+  for a container whose state JSON exists but fails to parse - mirrors
+  engine 0.1.0-25's matching check-stale.sh fix (result=unreadable vs.
+  result=missing), per this project's own rule that the two must agree on
+  what counts as stale/alerting. Surfaced as a new red "Unreadable" badge
+  and hint text on the host detail page, and folded into
+  GET /api/alerts/summary's failed_hosts bucket (there's no dedicated
+  dashboard bucket for it) rather than silently ranking alongside "ok" in
+  _worst_status, which it would have done unnoticed otherwise.
+
 * Thu Nov 12 2026 Developer <dev@example.com> - 0.1.0-39
 - Adds a guided Admin UI flow for setting up an "extra path" (see
   engine 0.1.0-24's pull-extra.sh and bind-mounted-storage.md): a

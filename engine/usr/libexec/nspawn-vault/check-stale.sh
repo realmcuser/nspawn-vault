@@ -147,10 +147,28 @@ for host_dir in "$ETC_DIR"/*/; do
         label="${host}/${name}"
 
         if [ -f "$f" ]; then
-            result=$(python3 -c "import json,sys; d=json.load(open('$f')); print(d.get('result','missing'))" 2>/dev/null || echo missing)
-            ts=$(python3 -c "import json,sys,datetime; d=json.load(open('$f')); print(int(datetime.datetime.fromisoformat(d['ts']).timestamp()))" 2>/dev/null || echo 0)
-            ransomware=$(python3 -c "import json; d=json.load(open('$f')); print('1' if d.get('ransomware_suspected') else '0')" 2>/dev/null || echo 0)
-            changed=$(python3 -c "import json; d=json.load(open('$f')); print(d.get('changed_entries', 0))" 2>/dev/null || echo 0)
+            if python3 -c "import json; json.load(open('$f'))" >/dev/null 2>&1; then
+                result=$(python3 -c "import json,sys; d=json.load(open('$f')); print(d.get('result','missing'))" 2>/dev/null || echo missing)
+                ts=$(python3 -c "import json,sys,datetime; d=json.load(open('$f')); print(int(datetime.datetime.fromisoformat(d['ts']).timestamp()))" 2>/dev/null || echo 0)
+                ransomware=$(python3 -c "import json; d=json.load(open('$f')); print('1' if d.get('ransomware_suspected') else '0')" 2>/dev/null || echo 0)
+                changed=$(python3 -c "import json; d=json.load(open('$f')); print(d.get('changed_entries', 0))" 2>/dev/null || echo 0)
+            else
+                # The file exists but isn't valid JSON - a distinct case
+                # from "no file at all" (result=missing), worth its own
+                # label rather than silently falling back to "missing" and
+                # reporting a nonsense age counted from epoch 0 (hit live
+                # 2026-11-12 from a raw \r in a captured ssh error, since
+                # fixed in pull.sh's/pull-extra.sh's fail() - but an old
+                # already-broken file, or some other future cause of
+                # invalid JSON, should still be reported clearly rather
+                # than misread as "missing"). The file's own mtime stands
+                # in for ts, since the real one can't be read - at least
+                # gives a real age instead of a huge bogus one.
+                result=unreadable
+                ts=$(stat -c %Y "$f" 2>/dev/null || echo 0)
+                ransomware=0
+                changed=0
+            fi
         else
             result=missing
             ts=0

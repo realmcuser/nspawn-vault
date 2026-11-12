@@ -43,9 +43,12 @@ mkdir -p "$STATE_DIR"
 STATE="$STATE_DIR/${DATASET//\//_}.json"
 
 fail() {
+    # See pull.sh's matching comment - python3's json.dumps covers every
+    # JSON-mandated control-character escape, not just backslash/quote.
     local msg
-    msg=$(printf '%s' "$1" | tr '\n' ' ' | sed 's/\\/\\\\/g; s/"/\\"/g')
-    printf '{"result":"failed","ts":"%s","msg":"%s"}\n' "$(date -Iseconds)" "$msg" > "$STATE"
+    msg=$(printf '%s' "$1" | tr '\n' ' ')
+    msg=$(python3 -c 'import json, sys; print(json.dumps(sys.argv[1]))' "$msg")
+    printf '{"result":"failed","ts":"%s","msg":%s}\n' "$(date -Iseconds)" "$msg" > "$STATE"
     echo "FAILED: $1" >&2
     exit 1
 }

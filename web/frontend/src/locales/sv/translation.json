@@ -44,6 +44,7 @@
     "logScopeHint": "Filtrerad till den här containern - den underliggande körningen pullar alla containrar på hosten tillsammans, så någon enstaka orelaterad rad kan fortfarande slinka med.",
     "noLogAvailable": "Ingen loggdata hittades för denna pull (kontrollera att journalen inte hunnit rensas).",
     "dbBackedUpHint": "Senaste lyckade pull inkluderade en databasdump",
+    "statusUnreadableHint": "Statusfilen för den senaste pullen kunde inte tolkas som giltig JSON - troligen ett skadat eller avbrutet skriv. Kontrollera pull-loggen för den verkliga orsaken.",
     "runNow": "Kör nu",
     "pullStarted": "Pull-backup startad. Det kan ta allt från sekunder till en timme beroende på hur mycket som ändrats sedan senast.",
     "download": "Ladda ner",
