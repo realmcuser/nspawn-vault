@@ -11,6 +11,12 @@
 # Containers with no DB configured here are a normal, supported case - this
 # just no-ops (exit 0) for them, it does not treat "no DB" as a failure.
 #
+# Not every container has a systemd of its own to connect to - see
+# run_in_container() below and pre-snapshot.sh's matching comment for why
+# this falls back to nsenter in that case, and why that's told apart from
+# a real mysqldump failure by systemd-run's own error text rather than by
+# probing the container's filesystem.
+#
 # Credentials file: /etc/cockpit-nspawn/pull/<name>.cnf, a mysql [client]
 # section with the DB password, mode 600, created once by whoever sets up
 # pull backups for this container (see example.cnf in this directory).
@@ -44,6 +50,43 @@ write_status() {
         "$1" "$(date -Iseconds)" "${3:-0}" "$(printf '%s' "${2:-}" | tr '"' "'")" "${4:-}" > "$STATUS_FILE"
 }
 
+# See pre-snapshot.sh for the detailed rationale - identical mechanism,
+# duplicated here rather than shared since these two scripts have no
+# common sourced library today and dispatch.sh only ever execs one fixed,
+# whitelisted script name per command.
+# $? right after "if CMD; then ... fi" with no matching else is 0
+# regardless of CMD's real exit status (that's the if-construct's own
+# exit status, per POSIX - not CMD's) - rc is captured in an explicit
+# else instead, where $? is still CMD's own real exit code.
+HOOK_TIMEOUT_SEC="${HOOK_TIMEOUT_SEC:-600}"
+run_in_container() {
+    local cmd="$1" out rc pid
+    if out=$(systemd-run --machine="$name" --pipe --wait --quiet -- bash -c "$cmd" 2>&1); then
+        printf '%s' "$out"
+        return 0
+    else
+        rc=$?
+    fi
+    if [[ "$out" != *"Failed to connect to bus"* ]]; then
+        printf '%s' "$out"
+        return "$rc"
+    fi
+
+    pid=$(machinectl show "$name" -p Leader --value 2>/dev/null) || true
+    if [[ -z "$pid" ]]; then
+        printf '%s' "no systemd in '$name' (systemd-run: $out) and could not determine its leader PID to fall back to nsenter"
+        return 1
+    fi
+    if out=$(timeout "$HOOK_TIMEOUT_SEC" nsenter -t "$pid" -a bash -c "$cmd" 2>&1); then
+        printf '%s' "$out"
+        return 0
+    else
+        rc=$?
+    fi
+    printf '%s' "$out"
+    return "$rc"
+}
+
 MYCNF_SRC="/etc/cockpit-nspawn/pull/${name}.cnf"
 if [ ! -f "$MYCNF_SRC" ]; then
     echo "snapshot-db.sh: no DB configured for '$name' ($MYCNF_SRC missing) - skipping DB dump" >&2
@@ -66,10 +109,9 @@ dest_dump="/var/lib/machines/${name}${DUMP_IN_CONTAINER}"
 install -m600 "$MYCNF_SRC" "$dest_creds"
 trap 'rm -f "$dest_creds"' EXIT
 
-if ! systemd-run --machine="$name" --wait --quiet -- \
-        bash -c "mysqldump --defaults-extra-file=$CREDS_IN_CONTAINER --single-transaction --routines --events --all-databases > $DUMP_IN_CONTAINER"; then
-    write_status "failed" "mysqldump failed - is MariaDB running and the credentials in ${MYCNF_SRC} correct?"
-    echo "snapshot-db.sh: mysqldump failed for '$name'" >&2
+if ! dump_out=$(run_in_container "mysqldump --defaults-extra-file=$CREDS_IN_CONTAINER --single-transaction --routines --events --all-databases > $DUMP_IN_CONTAINER"); then
+    write_status "failed" "mysqldump failed - is MariaDB running and the credentials in ${MYCNF_SRC} correct? (${dump_out:-no output})"
+    echo "snapshot-db.sh: mysqldump failed for '$name': ${dump_out:-no output}" >&2
     exit 1
 fi
 

@@ -2,12 +2,23 @@
 #
 # Install at /etc/cockpit-nspawn/pull/<container-name>.hook on the SOURCE
 # host, mode 600 if it contains anything sensitive, owned by root. A single
-# shell command (or short script) run inside the container via systemd-run
-# right before the vault's pull. Optional - if this file doesn't exist,
-# pre-snapshot.sh just skips it for that container - not every container
-# needs one.
+# shell command (or short script) run inside the container (via systemd-run,
+# or nsenter when the container has no systemd of its own - see
+# pre-snapshot.sh) right before the vault's pull. Optional - if this file
+# doesn't exist, pre-snapshot.sh just skips it for that container - not
+# every container needs one.
+#
+# The output file MUST be exactly /var/tmp/cockpit-nspawn-db.sql - that is
+# the one path pull.sh's rsync explicitly includes (see pull-host.sh's/
+# pull.sh's RSYNC_EXCLUDES, "--include=/var/tmp/cockpit-nspawn-db.sql"
+# before the broader "--exclude=/var/tmp/*"); anything else written here
+# never reaches the vault at all, no error, no warning. The dump is removed
+# from the container again by restore-after-backup.sh after the pull.
 #
 # Examples:
 #   ipa-backup
-#   pg_dump -U postgres mydb > /var/tmp/mydb.sql
-pg_dump -U postgres mydb > /var/tmp/mydb.sql
+#   pg_dumpall -U postgres > /var/tmp/cockpit-nspawn-db.sql
+#   # add --oids only if this specific database still has tables created
+#   # with WITH OIDS (old PostgreSQL default, removed in PG 12+) - pg_dump/
+#   # pg_dumpall otherwise silently drops those columns from the dump.
+pg_dumpall -U postgres > /var/tmp/cockpit-nspawn-db.sql

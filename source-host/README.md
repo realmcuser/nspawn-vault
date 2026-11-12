@@ -23,12 +23,19 @@ section 7), not built yet.
   --machine=` right before the pull, for services with their own backup
   tooling (FreeIPA's `ipa-backup`, `pg_dump`, etc.) that `snapshot-db.sh`
   doesn't cover. No-ops if the container has no hook file configured (see
-  `example.hook`) - that's a normal case, not an error.
+  `example.hook`) - that's a normal case, not an error. Falls back to
+  `nsenter` when the container has no systemd of its own to connect to
+  (e.g. a `Boot=no`/`ProcessTwo=yes` container running a distro with no
+  systemd inside, such as CentOS 7) - see the `run_in_container()` comment
+  in the script. Override `HOOK_TIMEOUT_SEC` (default 600) if a hook
+  legitimately needs longer, since the `nsenter` path has no timeout of
+  its own.
 - **`snapshot-db.sh`** - best-effort application-consistent MariaDB dump,
   run *inside* the container via `systemd-run --machine=`, so the DB
   password never has to leave this host. No-ops if the container has no DB
   credentials file configured (see `example.cnf`) - that's a normal case,
-  not an error.
+  not an error. Same `nsenter` fallback and `HOOK_TIMEOUT_SEC` override as
+  `pre-snapshot.sh`, for the same reason.
 - **`list-capabilities.sh`** - lists Linux file capabilities (`setcap`)
   under the container's conventional system binary directories, so the
   vault can reapply them locally after its own rsync pull (which doesn't
