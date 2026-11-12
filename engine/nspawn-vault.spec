@@ -109,6 +109,26 @@ echo ""
 %systemd_postun_with_restart nspawn-vault-check.timer nspawn-vault-prune.timer
 
 %changelog
+* Thu Nov 12 2026 Developer <dev@example.com> - 0.1.0-24
+- Adds pull-extra.sh and pull-host.sh support for "extra paths": host-level
+  directories that live outside any container's own rootfs tree, typically
+  data a container only sees via a systemd-nspawn Bind= mount in its
+  .nspawn unit. pull.sh's rsync reads the source host's root mount
+  namespace, where a Bind= target is just an empty mountpoint - the bind is
+  only visible inside the container's own running namespace - so any data
+  under one was silently never backed up, with no error and no warning.
+  Confirmed live on vilhelmina-csrv.vpn.fhd.se 2026-11-12
+  (/usr/butik/samba, backed by /srv/fhd-shares/fhdcore-vilhelmina, came
+  back empty on every pull for weeks). An "extra path" gets its own
+  dedicated SSH key (authorized_keys forced command is a bare
+  `rrsync -ro <exact path>`, not dispatch.sh) so a compromised key only
+  ever exposes that one directory - see source-host/README.md and
+  pull-backup-threat-model.md's "Bind-mounted external storage" section.
+  Listed in the same per-host containers file as a real container (same
+  dashboard/staleness/ransomware-threshold handling), but routed to
+  pull-extra.sh instead of pull.sh whenever a matching
+  <host>/extra/<name>.key file exists.
+
 * Fri Oct 23 2026 Developer <dev@example.com> - 0.1.0-23
 - Adds an optional per-container override of the ransomware-detection
   diff threshold: pull.sh now checks
