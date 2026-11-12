@@ -35,6 +35,33 @@ zero bytes of that directory. The customer noticed missing files under
 was found - **not** by any alert, since nothing in the existing
 success/staleness/ransomware checks could have detected it.
 
+## Confirmed instances fixed so far
+
+- `vilhelmina-csrv.vpn.fhd.se`: `fhdcore-vilhelmina` + `samba-fhdcore-vilhelmina`
+  → `/srv/fhd-shares/fhdcore-vilhelmina`, label `fhdcore-vilhelmina-shares`.
+  Found 2026-11-12 (the customer themselves noticed missing files).
+- `fhdcore-jf.vpn.fhd.se`: `fhdcore-jf2` + `samba-fhdcore-jf2` →
+  `/srv/fhd-shares/fhdcore-jf2`, label `fhdcore-jf2-shares`. Found
+  2026-11-12 during a fleet-wide `Bind=` sweep prompted by the vilhelmina
+  case - same exact pattern, same exact bug, also already "succeeding" on
+  every pull.
+
+This `<container>` / `samba-<container>` pair sharing one host directory
+via `Bind=` (one side `:idmap`, one side not) is evidently a **standard
+pattern** in this fleet's architecture, not a one-off - the Samba
+container is kept separate from the main container for a deliberate
+security reason (the main container can write into the share; the Samba
+container must not be able to write back into the main container), not an
+accident worth "fixing" by removing the bind mount. Any host using this
+pattern needs the extra-path treatment below for its share directory.
+
+A fleet sweep for the same `Bind=` pattern also turned up a few other
+hosts where it's configured but currently moot, because the affected
+containers aren't in that host's `containers` file at all yet - the
+bind-mount gap only matters once a container is actually being backed up
+in the first place. Whether and when those should be onboarded is a
+separate, operator-side decision, not covered by this document.
+
 ## How to spot this when onboarding any new host
 
 Before considering a new source host "done", check every container's
